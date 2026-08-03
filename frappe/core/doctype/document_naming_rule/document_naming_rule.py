@@ -69,3 +69,55 @@ class DocumentNamingRule(Document):
 
 		doc.name = naming_series + ("%0" + str(self.prefix_digits) + "d") % (counter + 1)
 		frappe.db.set_value(self.doctype, self.name, "counter", counter + 1)
+
+
+@frappe.whitelist()
+def get_condition_field_values(document_type: str, fieldname: str) -> list:
+	"""Get distinct values for a field that can be used in naming rule conditions."""
+	if not document_type or not fieldname:
+		return []
+
+	try:
+		meta = frappe.get_meta(document_type)
+		field = meta.get_field(fieldname)
+
+		if not field:
+			return []
+
+		fieldtype = field.fieldtype
+
+		# For Link fields, get values from the linked doctype
+		if fieldtype == "Link":
+			linked_doctype = field.options
+			if linked_doctype:
+				values = frappe.db.get_list(
+					linked_doctype,
+					fields=["name"],
+					limit_page_length=500,
+					order_by="name asc"
+				)
+				return [{"label": v["name"], "value": v["name"]} for v in values]
+
+		# For Select fields, get options from field definition
+		elif fieldtype == "Select":
+			if field.options:
+				options = field.options.split("\n") if isinstance(field.options, str) else []
+				return [{"label": opt.strip(), "value": opt.strip()} for opt in options if opt.strip()]
+
+		# For other standard fields, fetch distinct values from database
+		else:
+			if frappe.db.table_exists(document_type):
+				values = frappe.db.get_list(
+					document_type,
+					fields=[fieldname],
+					distinct=True,
+					limit_page_length=500,
+					order_by=f"{fieldname} asc"
+				)
+				return [{"label": str(v[fieldname]), "value": str(v[fieldname])}
+						for v in values if v[fieldname] is not None]
+
+		return []
+
+	except Exception:
+		return []

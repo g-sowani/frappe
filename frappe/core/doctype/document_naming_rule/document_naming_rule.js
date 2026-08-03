@@ -44,3 +44,37 @@ frappe.ui.form.on("Document Naming Rule", {
 		}
 	},
 });
+
+frappe.ui.form.on("Document Naming Rule Condition", {
+	field: function (frm, cdt, cdn) {
+		// When field is selected, populate value field options
+		const row = locals[cdt][cdn];
+		const parent_doc = frm.doc;
+
+		if (!parent_doc.document_type || !row.field) {
+			return;
+		}
+
+		frappe.call({
+			method: "frappe.core.doctype.document_naming_rule.document_naming_rule.get_condition_field_values",
+			args: {
+				document_type: parent_doc.document_type,
+				fieldname: row.field,
+			},
+			callback: function (r) {
+				if (r.message) {
+					frm.fields_dict.conditions.grid.update_docfield_property(
+						"value",
+						"options",
+						r.message
+					);
+					// Refresh the specific row to apply the options
+					const grid_row = frm.fields_dict.conditions.grid.grid_rows_by_row_index[row.idx - 1];
+					if (grid_row) {
+						grid_row.refresh();
+					}
+				}
+			},
+		});
+	},
+});

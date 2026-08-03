@@ -1,6 +1,9 @@
 # Copyright (c) 2020, Frappe Technologies and Contributors
 # License: MIT. See LICENSE
 import frappe
+from frappe.core.doctype.document_naming_rule.document_naming_rule import (
+	get_condition_field_values,
+)
 from frappe.tests import IntegrationTestCase
 
 
@@ -66,3 +69,30 @@ class TestDocumentNamingRule(IntegrationTestCase):
 			todo.delete()
 			todo_1.delete()
 			todo_2.delete()
+
+	def test_get_condition_field_values_for_select_field(self):
+		values = get_condition_field_values("ToDo", "priority")
+		self.assertIsInstance(values, list)
+		# priority field is a Select field with predefined options
+		value_list = [v["value"] for v in values]
+		self.assertIn("High", value_list)
+		self.assertIn("Medium", value_list)
+		self.assertIn("Low", value_list)
+
+	def test_get_condition_field_values_for_link_field(self):
+		values = get_condition_field_values("ToDo", "assigned_by")
+		self.assertIsInstance(values, list)
+		# assigned_by is a Link field to User
+
+	def test_get_condition_field_values_invalid_inputs(self):
+		# Test with empty inputs
+		result = get_condition_field_values("", "")
+		self.assertEqual(result, [])
+
+		# Test with invalid doctype
+		result = get_condition_field_values("InvalidDocType", "field")
+		self.assertEqual(result, [])
+
+		# Test with invalid field
+		result = get_condition_field_values("ToDo", "invalid_field")
+		self.assertEqual(result, [])
