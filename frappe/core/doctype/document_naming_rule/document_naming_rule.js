@@ -62,17 +62,20 @@ frappe.ui.form.on("Document Naming Rule Condition", {
 				fieldname: row.field,
 			},
 			callback: function (r) {
-				if (r.message) {
-					frm.fields_dict.conditions.grid.update_docfield_property(
-						"value",
-						"options",
-						r.message
-					);
-					// Refresh the specific row to apply the options
-					const grid_row = frm.fields_dict.conditions.grid.grid_rows_by_row_index[row.idx - 1];
-					if (grid_row) {
-						grid_row.refresh();
-					}
+				if (!r.message) {
+					return;
+				}
+
+				const grid = frm.fields_dict.conditions.grid;
+				// keeps df.options current for rows/controls not yet rendered
+				grid.update_docfield_property("value", "options", r.message);
+
+				// the current row's "value" control, if already instantiated inline,
+				// won't pick up the new df.options on its own, so refresh it directly
+				const grid_row = grid.grid_rows_by_docname[cdn];
+				const value_field = grid_row && grid_row.columns.value && grid_row.columns.value.field;
+				if (value_field) {
+					value_field.set_data(r.message);
 				}
 			},
 		});
