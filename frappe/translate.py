@@ -19,7 +19,7 @@ from csv import reader, writer
 
 import frappe
 from frappe.query_builder import DocType, Field
-from frappe.utils import cstr, get_bench_path, get_build_version, is_html, strip, strip_html_tags, unique
+from frappe.utils import cstr, get_bench_path, get_build_version, strip, unique
 from frappe.utils.caching import http_cache
 
 REPORT_TRANSLATE_PATTERN = re.compile('"([^:,^"]*):')
@@ -917,9 +917,6 @@ def update_translations_for_source(source: str | None = None, translation_dict: 
 		return
 
 	translation_dict = frappe.parse_json(translation_dict)
-
-	if is_html(source):
-		source = strip_html_tags(source)
 
 	# for existing records
 	translation_records = frappe.db.get_values(

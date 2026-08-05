@@ -76,7 +76,7 @@ frappe.views.TranslationManager = class TranslationManager {
 		return frappe.db.get_list("Translation", {
 			fields: ["name", "language", "translated_text as translation"],
 			filters: {
-				source_text: strip_html(this.source_text),
+				source_text: this.source_text,
 			},
 		});
 	}

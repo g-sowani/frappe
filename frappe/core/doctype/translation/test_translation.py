@@ -103,6 +103,42 @@ class TestTranslation(IntegrationTestCase):
 
 		self.assertEqual(_(source), target)
 
+	def test_html_source_translation_via_update_api(self):
+		"""Source text w/ HTML tags must survive the whitelisted update API (#21120)"""
+		from frappe.translate import update_translations_for_source
+
+		source = "Hello <b>World</b>"
+		target = "Hallo <b>Welt</b>"
+
+		frappe.local.lang = "de"
+		self.assertEqual(_(source), source)
+
+		update_translations_for_source(source=source, translation_dict={"de": target})
+
+		# tags must be kept as-is, matching what the Translation doctype itself stores
+		self.assertEqual(frappe.db.get_value("Translation", {"language": "de"}, "source_text"), source)
+		self.assertEqual(_(source), target)
+
+	def test_legacy_stripped_source_text_still_resolves(self):
+		"""Records stored before tags were preserved are keyed w/o HTML, they must still resolve"""
+		source = "Hello <b>World</b>"
+		target = "Hallo Welt"
+
+		# simulate a pre-existing record whose source_text had its tags stripped on save
+		create_translation("de", "Hello World", target)
+
+		frappe.local.lang = "de"
+		self.assertEqual(_(source), target)
+
+	def test_exact_html_match_wins_over_stripped_fallback(self):
+		source = "Hello <b>World</b>"
+
+		create_translation("de", "Hello World", "stripped match")
+		create_translation("de", source, "exact match")
+
+		frappe.local.lang = "de"
+		self.assertEqual(_(source), "exact match")
+
 	def test_translated_html_is_sanitized(self):
 		source = "Translation with HTML"
 		target = """

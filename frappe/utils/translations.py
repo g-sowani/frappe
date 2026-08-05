@@ -8,6 +8,7 @@ def _(msg: str, lang: str | None = None, context: str | None = None) -> str:
 	        _('Change', context='Coins')
 	"""
 	from frappe.translate import get_all_translations
+	from frappe.utils import is_html, strip_html_tags
 
 	if not hasattr(frappe.local, "lang"):
 		frappe.local.lang = lang or "en"
@@ -29,8 +30,12 @@ def _(msg: str, lang: str | None = None, context: str | None = None) -> str:
 	# msg should always be unicode
 	msg = frappe.as_unicode(msg).strip()
 
-	msg_with_html = frappe.as_unicode(non_translated_string).strip()
-	msg_list = [msg, msg_with_html]
+	# Translations are keyed by the source text as-is, HTML tags included. Records written
+	# before the Translation doctype stopped stripping tags are keyed by the tag-free text,
+	# so fall back to that only if the exact key misses.
+	msg_list = [msg]
+	if is_html(msg):
+		msg_list.append(strip_html_tags(msg).strip())
 
 	for msg in msg_list:
 		translated_string = ""
