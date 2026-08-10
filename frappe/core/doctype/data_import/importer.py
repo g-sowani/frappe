@@ -778,15 +778,19 @@ class ImportFile:
 			# are considered as child rows
 			parent_column_indexes = self.header.get_column_indexes(self.doctype)
 
+			first_row_values = first_row.get_values(parent_column_indexes)
+
 			data_without_first_row = data[1:]
 			for row in data_without_first_row:
 				row_values = row.get_values(parent_column_indexes)
-				# if the row is blank, it's a child row doc
-				if all(v in INVALID_VALUES for v in row_values):
+				# a row belongs to the current doc if its parent columns are either
+				# blank or repeat the same values as the doc's first row
+				if all(
+					v in INVALID_VALUES or v == fv for v, fv in zip(row_values, first_row_values, strict=True)
+				):
 					rows.append(row)
 					continue
-				# if we encounter a row which has values in parent columns,
-				# then it is the next doc
+				# a genuinely different value in a parent column means a new doc starts here
 				break
 
 		parent_doc = None

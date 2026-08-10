@@ -94,6 +94,33 @@ class TestImporter(IntegrationTestCase):
 		self.assertEqual(doc3.another_number, 5)
 		self.assertEqual(format_duration(doc3.duration), "5d 5h 45m")
 
+	def test_child_row_groups_when_parent_value_repeated(self):
+		"""Regression test for https://github.com/frappe/frappe/issues/18215"""
+		self.addCleanup(_delete_doctype_records, doctype_name, SAMPLE_IMPORT_DOC_NAMES)
+		import_file = get_import_file("sample_import_file")
+		data_import = self.get_importer(doctype_name, import_file)
+		i = Importer(data_import.reference_doctype, data_import=data_import)
+
+		# repeat row 1's parent values on row 2 instead of leaving them blank
+		first_row = i.import_file.raw_data[1]
+		continuation_row = i.import_file.raw_data[2]
+		for col_index in range(5):
+			continuation_row[col_index] = first_row[col_index]
+
+		i.import_file.parse_data_from_template()
+		i.import_data()
+
+		import_logs = frappe.get_all(
+			"Data Import Log", fields=["success"], filters={"data_import": data_import.name}
+		)
+		self.assertTrue(all(log.success for log in import_logs))
+
+		self.assertEqual(frappe.db.count(doctype_name, {"title": "Test"}), 1)
+		doc1 = frappe.get_doc(doctype_name, "Test")
+		self.assertEqual(len(doc1.table_field_1), 2)
+		self.assertEqual(doc1.table_field_1[0].child_title, "child title")
+		self.assertEqual(doc1.table_field_1[1].child_title, "child title 2")
+
 	def test_skip_rows_during_import(self):
 		self.addCleanup(_delete_doctype_records, doctype_name, ("Test 2", "Test 3"))
 		for name in ("Test", "Test 2", "Test 3"):
