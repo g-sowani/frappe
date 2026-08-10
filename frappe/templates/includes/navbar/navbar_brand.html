@@ -1,0 +1,11 @@
+{%- if brand_html -%}
+	{{ brand_html }}
+{%- elif banner_image -%}
+	<img src='{{ banner_image }}'>
+{%- elif frappe.get_hooks("brand_html") -%}
+	{{ frappe.get_hooks("brand_html")[0] }}
+{%- else -%}
+	<span class="navbar-brand-logo" data-tooltip="{{ _("Home") }}">
+		<img src="/assets/frappe/images/frappe-logo.png" alt="{{ _("Home") }}">
+	</span>
+{%- endif -%}

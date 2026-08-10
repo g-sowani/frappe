@@ -11,13 +11,7 @@
 		<div class="row no-gutters w-100">
 			<div class="col-12 col-lg-2">
 				<a class="navbar-brand" href="{{ url_prefix }}{{ home_page or "/" }}">
-					{%- if brand_html -%}
-					{{ brand_html }}
-					{%- elif banner_image -%}
-					<img src='{{ banner_image }}'>
-					{%- else -%}
-					<span>{{ (frappe.get_hooks("brand_html") or [_("Home")])[0] }}</span>
-					{%- endif -%}
+					{% include "templates/includes/navbar/navbar_brand.html" %}
 				</a>
 			</div>
 			<div class="col-12 col-lg-8">

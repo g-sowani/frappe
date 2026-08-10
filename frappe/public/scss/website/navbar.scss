@@ -84,10 +84,46 @@
 }
 
 .navbar-brand {
+	// center the brand the same way .navbar-nav .nav-item centers the profile icon
+	display: flex;
+	align-items: center;
+
 	img {
 		display: inline-block;
 		max-width: 150px;
 		max-height: 22px;
+	}
+
+	.navbar-brand-logo {
+		position: relative;
+		display: inline-flex;
+
+		img {
+			// match .avatar-medium used by the navbar profile icon
+			max-height: 28px;
+		}
+
+		// instant tooltip; the native `title` attribute waits ~1s before showing
+		&::after {
+			content: attr(data-tooltip);
+			position: absolute;
+			top: 100%;
+			left: 0;
+			margin-top: 6px;
+			padding: 2px 8px;
+			border-radius: var(--radius-sm);
+			background-color: var(--gray-800);
+			color: var(--white);
+			font-size: var(--text-sm);
+			white-space: nowrap;
+			opacity: 0;
+			pointer-events: none;
+			transition: opacity 100ms ease-in-out;
+		}
+
+		&:hover::after {
+			opacity: 1;
+		}
 	}
 }
 
