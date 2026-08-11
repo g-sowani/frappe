@@ -10,15 +10,15 @@ thead {
 	border-radius: var(--radius-md);
 }
 
-thead>tr {
+thead > tr {
 	border-radius: var(--radius-md);
 }
 
-thead>tr>th:first-child {
+thead > tr > th:first-child {
 	border-radius: var(--radius-md) 0 0 var(--radius-md);
 }
 
-thead>tr>th:last-child {
+thead > tr > th:last-child {
 	border-radius: 0 var(--radius-md) var(--radius-md) 0;
 }
 
@@ -30,23 +30,34 @@ thead>tr>th:last-child {
 	text-indent: -99999px;
 } */
 
-td[data-fieldname="permissions"]>.row>.col-md-4 {
+td[data-fieldname="permissions"] > .row > .col-md-4 {
 	margin-bottom: var(--margin-sm);
 }
 
-tbody>tr {
+tbody > tr {
 	border-top: 1px solid var(--border-color);
 }
 
-tbody>tr:first-child {
+tbody > tr:first-child {
 	border-top: none;
 }
 
-button.btn-remove-perm {
-	box-shadow: none;
-	padding: var(--padding-xs) var(--padding-xs);
+/* staged-but-not-yet-applied state, see PermissionEngine.pending_changes.
+   Reuses the same diff-add/diff-remove tokens frappe/public/scss/desk/global.scss
+   already defines for this exact added/removed semantic (permission_manager.js's
+   own show_activity_log() uses the same diff-add/diff-remove classes for the
+   activity log's field diffs), instead of introducing new colors. */
+
+tbody > tr.perm-row-new {
+	background-color: var(--diff-added);
 }
 
-button.btn-remove-perm>svg>use {
-	stroke: var(--white);
+tbody > tr.perm-row-removed {
+	background-color: var(--diff-removed);
+}
+
+tbody > tr.perm-row-removed td[data-fieldname="parent"],
+tbody > tr.perm-row-removed td[data-fieldname="role"],
+tbody > tr.perm-row-removed td[data-fieldname="permlevel"] {
+	text-decoration: line-through;
 }

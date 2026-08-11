@@ -24,6 +24,12 @@ frappe.PermissionEngine = class PermissionEngine {
 		this.wrapper = wrapper;
 		this.page = wrapper.page;
 		this.body = $(this.wrapper).find(".perm-engine");
+		// staged, not-yet-applied changes, keyed so repeated edits to the same
+		// checkbox/row collapse into one entry instead of piling up. Kept on
+		// `this` (not tied to the current doctype/role filter) so changes
+		// staged for one view survive navigating to another - Apply Changes
+		// applies everything staged, regardless of what's on screen.
+		this.pending_changes = new Map();
 		this.make();
 		this.refresh();
 		this.add_check_events();
@@ -77,6 +83,22 @@ frappe.PermissionEngine = class PermissionEngine {
 			this.show_activity_log();
 		});
 
+		// `add_inner_button` lands in `.custom-actions`, off on the far left of
+		// the whole toolbar - not adjacent to Apply Changes. Built by hand
+		// instead: created once, inserted immediately before `page.btn_primary`
+		// (a stable element `set_primary_action` only relabels in place, so
+		// this stays correctly positioned across renders), and just
+		// shown/hidden by `update_action_bar()` from then on.
+		this.discard_btn = frappe.ui
+			.button({
+				label: __("Discard Changes"),
+				variant: "solid",
+				theme: "red",
+				onclick: () => this.discard_pending_changes(),
+			})
+			.insertBefore(this.page.btn_primary)
+			.hide();
+
 		this.set_from_route();
 	}
 
@@ -127,6 +149,10 @@ frappe.PermissionEngine = class PermissionEngine {
 					args: { doctype },
 				})
 				.then(() => {
+					// server state for this doctype just changed underneath any
+					// staged edits - drop them rather than reapply them onto rows
+					// that no longer mean what they meant when staged
+					this.purge_pending_changes_for_doctype(doctype);
 					this.refresh();
 				});
 		});
@@ -199,15 +225,256 @@ frappe.PermissionEngine = class PermissionEngine {
 	}
 
 	render(perm_list) {
+		// `perm_list` is server truth and only passed after a `refresh()`
+		// round trip. Local staging (checkbox toggle, add, remove) calls
+		// `render()` with no argument to redraw the same base list with
+		// `this.pending_changes` overlaid - no network call.
+		if (perm_list !== undefined) {
+			this.perm_list = perm_list || [];
+		}
 		this.body.empty();
-		this.perm_list = perm_list || [];
-		if (!this.perm_list.length) {
+		let effective_list = this.get_effective_perm_list();
+		if (!effective_list.length) {
 			this.set_empty_message(__("No Permissions set for this criteria."));
 		} else {
-			this.show_permission_table(this.perm_list);
+			this.show_permission_table(effective_list);
 		}
-		this.show_add_rule();
 		this.get_doctype() && this.make_reset_button();
+		this.update_action_bar();
+	}
+
+	row_key(doctype, role, permlevel, if_owner) {
+		return [doctype, role, cint(permlevel) || 0, cint(if_owner) || 0].join("::");
+	}
+
+	change_key(action, doctype, role, permlevel, if_owner, ptype) {
+		let parts = [action, doctype, role, cint(permlevel) || 0, cint(if_owner) || 0];
+		if (action === "update") parts.push(ptype);
+		return parts.join("::");
+	}
+
+	get_base_value(doctype, role, permlevel, if_owner, ptype) {
+		let row = (this.perm_list || []).find(
+			(r) =>
+				r.parent === doctype &&
+				r.role === role &&
+				this.row_key(r.parent, r.role, r.permlevel, r.if_owner) ===
+					this.row_key(doctype, role, permlevel, if_owner)
+		);
+		return row ? row[ptype] : 0;
+	}
+
+	stage_change(change) {
+		if (change.action === "update") {
+			let key = this.change_key(
+				"update",
+				change.doctype,
+				change.role,
+				change.permlevel,
+				change.if_owner,
+				change.ptype
+			);
+			let is_staged_new_row = this.pending_changes.has(
+				this.change_key("add", change.doctype, change.role, change.permlevel, 0)
+			);
+			let base_value = this.get_base_value(
+				change.doctype,
+				change.role,
+				change.permlevel,
+				change.if_owner,
+				change.ptype
+			);
+			if (!is_staged_new_row && cint(change.value) === cint(base_value)) {
+				// value toggled back to what's already on the server - nothing to stage
+				this.pending_changes.delete(key);
+			} else {
+				this.pending_changes.set(key, change);
+			}
+		} else {
+			// "add" / "remove" - one entry per row, last write wins
+			let key = this.change_key(
+				change.action,
+				change.doctype,
+				change.role,
+				change.permlevel,
+				change.if_owner
+			);
+			this.pending_changes.set(key, change);
+		}
+	}
+
+	unstage_row(doctype, role, permlevel) {
+		// drop a staged "add" and every staged "update" targeting it - used
+		// when discarding a not-yet-saved row, which was never sent to the
+		// server so there's nothing to "remove", only to forget.
+		for (let [key, change] of Array.from(this.pending_changes)) {
+			if (
+				change.doctype === doctype &&
+				change.role === role &&
+				cint(change.permlevel) === cint(permlevel) &&
+				(change.action === "add" || change.action === "update")
+			) {
+				this.pending_changes.delete(key);
+			}
+		}
+	}
+
+	purge_pending_changes_for_doctype(doctype) {
+		for (let [key, change] of Array.from(this.pending_changes)) {
+			if (change.doctype === doctype) this.pending_changes.delete(key);
+		}
+	}
+
+	get_effective_perm_list() {
+		let base = (this.perm_list || []).filter((d) => d.parent !== "DocType");
+		let rows = base.map((d) => {
+			let row = Object.assign({}, d);
+			row.permlevel = cint(row.permlevel) || 0;
+			row.if_owner = cint(row.if_owner) || 0;
+			// stable row identity, captured once from server truth and never
+			// touched by the overlay below - even when the field being
+			// staged IS if_owner itself. Without this, toggling "Only if
+			// Creator" would change the identity every subsequent checkbox
+			// on the row keys off of, splitting one row's edits across two
+			// different staged identities instead of collapsing onto one.
+			row._base_if_owner = row.if_owner;
+			return row;
+		});
+
+		if (!this.pending_changes.size) {
+			return rows;
+		}
+
+		let find_row = (doctype, role, permlevel, if_owner) => {
+			let key = this.row_key(doctype, role, permlevel, if_owner);
+			return rows.find(
+				(r) => this.row_key(r.parent, r.role, r.permlevel, r._base_if_owner) === key
+			);
+		};
+
+		// 1. staged new rows, so they render (and can be edited/undone) before being applied
+		this.pending_changes.forEach((change) => {
+			if (change.action !== "add") return;
+			if (find_row(change.doctype, change.role, change.permlevel, 0)) return;
+			let meta = frappe.get_meta(change.doctype);
+			rows.push({
+				parent: change.doctype,
+				role: change.role,
+				permlevel: cint(change.permlevel) || 0,
+				if_owner: 0,
+				_base_if_owner: 0,
+				is_submittable: meta ? meta.is_submittable : 0,
+				in_create: meta ? meta.in_create : 0,
+				linked_doctypes: [],
+				_pending_new: true,
+			});
+		});
+
+		// 2. overlay staged field values (including onto the staged-new rows above) -
+		// checkboxes just show the staged value, no per-field highlight; the row-level
+		// new/removed styling plus the "N Unsaved Changes" indicator carry that signal
+		this.pending_changes.forEach((change) => {
+			if (change.action !== "update") return;
+			let row = find_row(change.doctype, change.role, change.permlevel, change.if_owner);
+			if (!row) return;
+			row[change.ptype] = cint(change.value);
+		});
+
+		// 3. mark rows staged for removal (row stays visible, struck through, undoable)
+		this.pending_changes.forEach((change) => {
+			if (change.action !== "remove") return;
+			let row = find_row(change.doctype, change.role, change.permlevel, change.if_owner);
+			if (row) row._pending_removal = true;
+		});
+
+		return rows;
+	}
+
+	update_action_bar() {
+		let count = this.pending_changes.size;
+
+		if (count > 0) {
+			this.page.set_indicator(__("{0} Unsaved Change(s)", [count]), "orange");
+			this.page.set_primary_action(
+				__("Apply Changes ({0})", [count]),
+				() => this.apply_pending_changes(),
+				"check"
+			);
+			this.discard_btn && this.discard_btn.show();
+		} else {
+			this.page.clear_indicator();
+			this.discard_btn && this.discard_btn.hide();
+			this.show_add_rule();
+		}
+	}
+
+	discard_pending_changes() {
+		if (!this.pending_changes.size) return;
+		frappe.confirm(__("Discard all unsaved permission changes?"), () => {
+			this.pending_changes.clear();
+			this.render();
+		});
+	}
+
+	apply_pending_changes() {
+		if (!this.pending_changes.size) return;
+
+		let changes = Array.from(this.pending_changes.values()).map((c) => ({
+			action: c.action,
+			doctype: c.doctype,
+			role: c.role,
+			permlevel: cint(c.permlevel) || 0,
+			if_owner: cint(c.if_owner) || 0,
+			ptype: c.ptype,
+			value: c.value,
+		}));
+
+		frappe.dom.freeze(__("Applying changes..."));
+		frappe.call({
+			module: "frappe.core",
+			page: "permission_manager",
+			method: "apply_changes",
+			args: { changes },
+			callback: (r) => {
+				frappe.dom.unfreeze();
+				if (r.exc) {
+					// outer validation failure (bad batch shape, too many items) -
+					// nothing was applied, keep everything staged so nothing is lost
+					return;
+				}
+
+				let results = (r.message && r.message.results) || [];
+				let failures = results.filter((res) => !res.ok);
+
+				// server is now the source of truth for whatever it accepted -
+				// including the ones that failed, since they never applied and
+				// a resubmit only makes sense once the user re-stages them
+				this.pending_changes.clear();
+
+				if (failures.length) {
+					let items = failures
+						.map(
+							(f) =>
+								`<li>${frappe.utils.escape_html(
+									f.error || __("Unknown error")
+								)}</li>`
+						)
+						.join("");
+					frappe.msgprint({
+						title: __("Some changes could not be applied"),
+						indicator: "orange",
+						message: `<p>${__("{0} of {1} changes were not applied:", [
+							failures.length,
+							results.length,
+						])}</p><ul>${items}</ul>`,
+					});
+				} else {
+					frappe.show_alert({ message: __("Changes applied"), indicator: "green" });
+				}
+
+				this.refresh();
+			},
+		});
 	}
 
 	show_permission_table(perm_list) {
@@ -236,13 +503,12 @@ frappe.PermissionEngine = class PermissionEngine {
 		});
 
 		perm_list.forEach((d) => {
-			if (d.parent === "DocType") {
-				return;
-			}
-
 			if (!d.permlevel) d.permlevel = 0;
 
-			let row = $("<tr>").appendTo(this.table.find("tbody"));
+			let row = $("<tr>")
+				.appendTo(this.table.find("tbody"))
+				.toggleClass("perm-row-new", !!d._pending_new)
+				.toggleClass("perm-row-removed", !!d._pending_removal);
 			this.add_cell(row, d, "parent");
 			let role_cell = this.add_cell(row, d, "role");
 
@@ -308,10 +574,14 @@ frappe.PermissionEngine = class PermissionEngine {
 		checkbox
 			.find("input")
 			.prop("checked", d[fieldname] ? true : false)
+			.prop("disabled", !!d._pending_removal)
 			.attr("data-ptype", fieldname)
 			.attr("data-role", d.role)
 			.attr("data-permlevel", d.permlevel)
-			.attr("data-if_owner", d.if_owner)
+			// row identity, not the live value - see `_base_if_owner` in
+			// get_effective_perm_list(). Always the same for every checkbox
+			// in this row, even the "if_owner" checkbox itself.
+			.attr("data-if_owner", d._base_if_owner ?? d.if_owner)
 			.attr("data-doctype", d.parent);
 
 		checkbox.find("label").css("text-transform", "capitalize");
@@ -420,35 +690,68 @@ frappe.PermissionEngine = class PermissionEngine {
 	}
 
 	add_delete_button(row, d) {
-		$(
-			`<button class='btn btn-danger btn-remove-perm btn-xs'>${frappe.utils.icon(
-				"x"
-			)}</button>`
-		)
-			.appendTo($(`<td class="pt-4">`).appendTo(row))
-			.attr("data-doctype", d.parent)
-			.attr("data-role", d.role)
-			.attr("data-permlevel", d.permlevel)
-			.on("click", () => {
-				return frappe.call({
-					module: "frappe.core",
-					page: "permission_manager",
-					method: "remove",
-					args: {
+		let $td = $(`<td class="pt-4">`).appendTo(row);
+
+		if (d._pending_new) {
+			// never sent to the server - discarding just forgets it
+			frappe.ui
+				.button({
+					icon: "x",
+					variant: "solid",
+					theme: "red",
+					size: "xs",
+					tooltip: __("Discard"),
+					onclick: () => {
+						this.unstage_row(d.parent, d.role, d.permlevel);
+						this.render();
+					},
+				})
+				.appendTo($td);
+			return;
+		}
+
+		if (d._pending_removal) {
+			frappe.ui
+				.button({
+					label: __("Undo"),
+					variant: "outline",
+					size: "xs",
+					onclick: () => {
+						this.pending_changes.delete(
+							this.change_key(
+								"remove",
+								d.parent,
+								d.role,
+								d.permlevel,
+								d._base_if_owner
+							)
+						);
+						this.render();
+					},
+				})
+				.appendTo($td);
+			return;
+		}
+
+		frappe.ui
+			.button({
+				icon: "x",
+				variant: "solid",
+				theme: "red",
+				size: "xs",
+				tooltip: __("Remove"),
+				onclick: () => {
+					this.stage_change({
+						action: "remove",
 						doctype: d.parent,
 						role: d.role,
 						permlevel: d.permlevel,
-						if_owner: d.if_owner,
-					},
-					callback: (r) => {
-						if (r.exc) {
-							frappe.msgprint(__("Did not remove"));
-						} else {
-							this.refresh();
-						}
-					},
-				});
-			});
+						if_owner: d._base_if_owner,
+					});
+					this.render();
+				},
+			})
+			.appendTo($td);
 	}
 
 	add_check_events() {
@@ -459,38 +762,22 @@ frappe.PermissionEngine = class PermissionEngine {
 		});
 
 		this.body.on("click", "input[type='checkbox']", function () {
-			frappe.dom.freeze();
 			let chk = $(this);
-			let args = {
+			if (chk.prop("disabled")) return false;
+
+			me.stage_change({
+				action: "update",
 				role: chk.attr("data-role"),
 				permlevel: chk.attr("data-permlevel"),
 				doctype: chk.attr("data-doctype"),
 				ptype: chk.attr("data-ptype"),
 				value: chk.prop("checked") ? 1 : 0,
 				if_owner: chk.attr("data-if_owner"),
-			};
-			return frappe.call({
-				module: "frappe.core",
-				page: "permission_manager",
-				method: "update",
-				args: args,
-				callback: (r) => {
-					frappe.dom.unfreeze();
-					if (r.exc) {
-						// exception: reverse
-						chk.prop("checked", !chk.prop("checked"));
-					} else {
-						me.get_perm(args.role)[args.ptype] = args.value;
-
-						if (args.ptype == "if_owner") {
-							let report_checkbox = chk
-								.closest("div.row")
-								.find("div[data-fieldname='report']");
-							report_checkbox.toggle(!args.value);
-						}
-					}
-				},
 			});
+			// full local re-render: for the if_owner checkbox specifically, this
+			// also picks up the report-checkbox show/hide that already lives in
+			// show_permission_table().
+			me.render();
 		});
 	}
 
@@ -541,19 +828,23 @@ frappe.PermissionEngine = class PermissionEngine {
 					if (!args) {
 						return;
 					}
-					frappe.call({
-						module: "frappe.core",
-						page: "permission_manager",
-						method: "add",
-						args: args,
-						callback: (r) => {
-							if (r.exc) {
-								frappe.msgprint(__("Did not add"));
-							} else {
-								this.refresh();
-							}
-						},
-					});
+
+					let doctype = args.parent;
+					let role = args.role;
+					let permlevel = cint(args.permlevel);
+					let key = this.row_key(doctype, role, permlevel, 0);
+					let already_exists = (this.perm_list || []).some(
+						(r) => this.row_key(r.parent, r.role, r.permlevel, r.if_owner) === key
+					);
+					if (already_exists) {
+						frappe.msgprint(
+							__("A rule for this Document Type, Role and Level already exists.")
+						);
+						return;
+					}
+
+					this.stage_change({ action: "add", doctype, role, permlevel });
+					this.render();
 					d.hide();
 				});
 				d.show();
@@ -568,12 +859,6 @@ frappe.PermissionEngine = class PermissionEngine {
 				this.reset_std_permissions(data);
 			});
 		});
-	}
-
-	get_perm(role) {
-		return $.map(this.perm_list, function (d) {
-			if (d.role == role) return d;
-		})[0];
 	}
 
 	get_link_fields(doctype) {
