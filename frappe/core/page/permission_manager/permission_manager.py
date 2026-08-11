@@ -172,18 +172,23 @@ def remove(doctype: str, role: str, permlevel: int, if_owner: str | int = 0, val
 	custom_docperms = frappe.db.get_values(
 		"Custom DocPerm", {"parent": doctype, "role": role, "permlevel": permlevel, "if_owner": if_owner}
 	)
+
+	# check before deleting, not after: a blocked removal should leave the
+	# database untouched rather than delete first and rely on the caller
+	# rolling back an exception to put the row(s) back
+	remaining_after_removal = frappe.db.count("Custom DocPerm", {"parent": doctype}) - len(custom_docperms)
+	if remaining_after_removal <= 0:
+		frappe.throw(_("There must be atleast one permission rule."), title=_("Cannot Remove"))
+
 	for name in custom_docperms:
 		frappe.delete_doc("Custom DocPerm", name, ignore_permissions=True, force=True)
-
-	if not frappe.get_all("Custom DocPerm", {"parent": doctype}):
-		frappe.throw(_("There must be atleast one permission rule."), title=_("Cannot Remove"))
 
 	if validate:
 		validate_permissions_for_doctype(doctype, for_remove=True, alert=True)
 
 
 @frappe.whitelist()
-def apply_changes(changes: str | list[dict]):
+def apply_changes(changes: str | list):
 	"""Apply a batch of staged permission changes in one request.
 
 	Args:
@@ -191,6 +196,11 @@ def apply_changes(changes: str | list[dict]):
 			{"action": "add"|"update"|"remove", "doctype": str, "role": str,
 			 "permlevel": int, "if_owner": 0|1,
 			 "ptype": str (required for "update"), "value": 0|1 (required for "update")}
+			Deliberately typed as plain `list` rather than `list[dict]` - frappe's
+			whitelist type-coercion validates list *elements* against a subscripted
+			type before this function body runs, which would reject a malformed
+			item outright instead of letting it degrade to a single failed result
+			the way every other item in the batch does.
 
 	Returns:
 		{"results": [{"index": int, "ok": bool, "error": str | None}, ...]}
@@ -202,20 +212,36 @@ def apply_changes(changes: str | list[dict]):
 	if not changes:
 		return {"results": []}
 
+	if not isinstance(changes, list):
+		frappe.throw(_("changes must be a list of permission change objects."))
+
 	if len(changes) > MAX_BATCH_SIZE:
 		frappe.throw(_("Cannot apply more than {0} changes at once.").format(MAX_BATCH_SIZE))
 
 	# adds before removes so "remove rule A, add rule B" in one batch doesn't
 	# trip the "must have at least one rule" guard on the intermediate state
 	action_order = {"add": 0, "update": 1, "remove": 2}
-	ordered = sorted(enumerate(changes), key=lambda pair: action_order.get(pair[1].get("action"), 1))
+	ordered = sorted(
+		enumerate(changes),
+		key=lambda pair: action_order.get(pair[1].get("action") if isinstance(pair[1], dict) else None, 1),
+	)
 
 	results = [None] * len(changes)
 	touched_doctypes = set()
 
 	for original_index, change in ordered:
-		action = change.get("action")
 		try:
+			if not isinstance(change, dict):
+				frappe.throw(_("Each change must be an object, got {0}.").format(type(change).__name__))
+
+			action = change.get("action")
+			if action not in ("add", "update", "remove"):
+				frappe.throw(_("Unknown action: {0}").format(action))
+			if not change.get("doctype") or not change.get("role"):
+				frappe.throw(_("Each change requires a doctype and role."))
+			if action == "update" and not change.get("ptype"):
+				frappe.throw(_("An 'update' change requires a ptype."))
+
 			if action == "add":
 				add(change["doctype"], change["role"], change.get("permlevel", 0), validate=False)
 			elif action == "update":
@@ -236,8 +262,6 @@ def apply_changes(changes: str | list[dict]):
 					if_owner=change.get("if_owner", 0),
 					validate=False,
 				)
-			else:
-				frappe.throw(_("Unknown action: {0}").format(action))
 
 			frappe.db.commit()
 			results[original_index] = {"index": original_index, "ok": True, "error": None}
