@@ -693,7 +693,7 @@ def setup_custom_perms(parent):
 		return True
 
 
-def add_permission(doctype, role, permlevel=0, ptype=None):
+def add_permission(doctype, role, permlevel=0, ptype=None, validate=True):
 	"""Add a new permission rule to the given doctype
 	for the given Role and Permission Level"""
 	from frappe.core.doctype.doctype.doctype import validate_permissions_for_doctype
@@ -729,7 +729,8 @@ def add_permission(doctype, role, permlevel=0, ptype=None):
 
 	custom_docperm.save()
 
-	validate_permissions_for_doctype(doctype)
+	if validate:
+		validate_permissions_for_doctype(doctype)
 	return custom_docperm.name
 
 

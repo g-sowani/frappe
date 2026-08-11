@@ -26,6 +26,8 @@ from frappe.utils.user import get_users_with_role as _get_user_with_role
 
 not_allowed_in_permission_manager = ["DocType", "Patch Log", "Module Def"]
 
+MAX_BATCH_SIZE = 200
+
 
 @frappe.whitelist()
 def get_roles_and_doctypes():
@@ -114,9 +116,9 @@ def get_permissions(doctype: str | None = None, role: str | None = None):
 
 
 @frappe.whitelist()
-def add(parent: str, role: str, permlevel: int):
+def add(parent: str, role: str, permlevel: int, validate: bool = True):
 	frappe.only_for("System Manager")
-	add_permission(parent, role, permlevel)
+	return add_permission(parent, role, permlevel, validate=validate)
 
 
 @frappe.whitelist()
@@ -127,6 +129,7 @@ def update(
 	ptype: str,
 	value: str | int | None = None,
 	if_owner: str | int = 0,
+	validate: bool = True,
 ) -> str | None:
 	"""Update role permission params.
 
@@ -149,10 +152,12 @@ def update(
 	if ptype == "report" and value == "1" and if_owner == "1":
 		frappe.throw(_("Cannot set 'Report' permission if 'Only If Creator' permission is set"))
 
-	out = update_permission_property(doctype, role, permlevel, ptype, value, if_owner=if_owner)
+	out = update_permission_property(
+		doctype, role, permlevel, ptype, value, validate=validate, if_owner=if_owner
+	)
 
 	if ptype == "if_owner" and value == "1" and cint(permlevel) == 0:
-		update_permission_property(doctype, role, permlevel, "report", "0", if_owner=value)
+		update_permission_property(doctype, role, permlevel, "report", "0", validate=validate, if_owner=value)
 
 	frappe.db.after_commit.add(clear_cache)
 
@@ -160,7 +165,7 @@ def update(
 
 
 @frappe.whitelist()
-def remove(doctype: str, role: str, permlevel: int, if_owner: str | int = 0):
+def remove(doctype: str, role: str, permlevel: int, if_owner: str | int = 0, validate: bool = True):
 	frappe.only_for("System Manager")
 	setup_custom_perms(doctype)
 
@@ -173,7 +178,79 @@ def remove(doctype: str, role: str, permlevel: int, if_owner: str | int = 0):
 	if not frappe.get_all("Custom DocPerm", {"parent": doctype}):
 		frappe.throw(_("There must be atleast one permission rule."), title=_("Cannot Remove"))
 
-	validate_permissions_for_doctype(doctype, for_remove=True, alert=True)
+	if validate:
+		validate_permissions_for_doctype(doctype, for_remove=True, alert=True)
+
+
+@frappe.whitelist()
+def apply_changes(changes: str | list[dict]):
+	"""Apply a batch of staged permission changes in one request.
+
+	Args:
+		changes: list of dicts, each shaped like:
+			{"action": "add"|"update"|"remove", "doctype": str, "role": str,
+			 "permlevel": int, "if_owner": 0|1,
+			 "ptype": str (required for "update"), "value": 0|1 (required for "update")}
+
+	Returns:
+		{"results": [{"index": int, "ok": bool, "error": str | None}, ...]}
+		`index` matches the item's position in the input list.
+	"""
+	frappe.only_for("System Manager")
+
+	changes = frappe.parse_json(changes)
+	if not changes:
+		return {"results": []}
+
+	if len(changes) > MAX_BATCH_SIZE:
+		frappe.throw(_("Cannot apply more than {0} changes at once.").format(MAX_BATCH_SIZE))
+
+	# adds before removes so "remove rule A, add rule B" in one batch doesn't
+	# trip the "must have at least one rule" guard on the intermediate state
+	action_order = {"add": 0, "update": 1, "remove": 2}
+	ordered = sorted(enumerate(changes), key=lambda pair: action_order.get(pair[1].get("action"), 1))
+
+	results = [None] * len(changes)
+	touched_doctypes = set()
+
+	for original_index, change in ordered:
+		action = change.get("action")
+		try:
+			if action == "add":
+				add(change["doctype"], change["role"], change.get("permlevel", 0), validate=False)
+			elif action == "update":
+				update(
+					change["doctype"],
+					change["role"],
+					change.get("permlevel", 0),
+					change["ptype"],
+					value=change.get("value"),
+					if_owner=change.get("if_owner", 0),
+					validate=False,
+				)
+			elif action == "remove":
+				remove(
+					change["doctype"],
+					change["role"],
+					change.get("permlevel", 0),
+					if_owner=change.get("if_owner", 0),
+					validate=False,
+				)
+			else:
+				frappe.throw(_("Unknown action: {0}").format(action))
+
+			frappe.db.commit()
+			results[original_index] = {"index": original_index, "ok": True, "error": None}
+			touched_doctypes.add(change["doctype"])
+		except Exception as e:
+			frappe.db.rollback()
+			results[original_index] = {"index": original_index, "ok": False, "error": str(e)}
+
+	for doctype in touched_doctypes:
+		validate_permissions_for_doctype(doctype)
+		clear_permissions_cache(doctype)
+
+	return {"results": results}
 
 
 @frappe.whitelist()
