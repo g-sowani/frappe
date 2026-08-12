@@ -7,7 +7,10 @@
 .datepicker {
 	direction: ltr;
 	font-family: inherit;
-	z-index: 9999 !important;
+	// Must stay above driver.js's highlighted-element layer (z-index: 100004,
+	// see node_modules/driver.js/src/driver.scss) so the datepicker remains
+	// usable while a form tour overlay is active.
+	z-index: 100005 !important;
 	background: var(--fg-color);
 	color: var(--text-color);
 	border-radius: var(--radius-lg);
