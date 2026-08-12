@@ -101,6 +101,57 @@ frappe.ui.form.PrintView = class {
 		} else {
 			this.page.add_action_icon("file", () => this.go_to_form_view(), "", __("Form"));
 		}
+
+		this.add_email_button();
+	}
+
+	add_email_button() {
+		// lets users double-check the print preview and send it straight from
+		// here, without navigating back to the form view (frappe#20854).
+		// Built once like the other toolbar buttons (this.frm isn't set yet at
+		// this point in the lifecycle - it only exists once show() runs), and
+		// shown/hidden per document by toggle_email_button().
+		if (frappe.is_mobile()) {
+			this.$email_btn = this.page.add_button(__("Email"), () => this.email_doc(), {
+				icon: "mail",
+			});
+		} else {
+			this.$email_btn = this.page.add_action_icon(
+				"mail",
+				() => this.email_doc(),
+				"",
+				__("Email")
+			);
+		}
+	}
+
+	can_email() {
+		// mirrors the "email" permission gate used by the form toolbar's Email action
+		return frappe.model.can_email(this.frm.doctype) && this.frm.doc.docstatus < 2;
+	}
+
+	toggle_email_button() {
+		this.$email_btn.toggle(this.can_email());
+	}
+
+	email_doc() {
+		// reuse the form's own Email action when we have a real Form instance
+		// (the normal path: print view opened via the form's Print button) -
+		// CommunicationComposer leans on frm.timeline/frm.events/frm.wrapper,
+		// which only a fully initialized Form sets up.
+		if (typeof this.frm.email_doc === "function") {
+			return this.frm.email_doc();
+		}
+
+		// this.frm is instead the light {doctype, docname, doc, meta} object
+		// print.js builds for a direct /app/print visit - build the composer
+		// without a frm reference so it doesn't touch that missing machinery
+		// (this means "Attach Print" isn't offered in this fallback case).
+		return new frappe.views.CommunicationComposer({
+			doc: this.frm.doc,
+			subject: __(this.frm.meta.name) + ": " + this.frm.docname,
+			recipients: this.frm.doc.email || this.frm.doc.email_id || this.frm.doc.contact_email,
+		});
 	}
 
 	setup_sidebar() {
@@ -211,6 +262,7 @@ frappe.ui.form.PrintView = class {
 		this.set_title();
 		this.set_breadcrumbs();
 		this.setup_customize_dialog();
+		this.toggle_email_button();
 
 		let tasks = [
 			this.set_default_print_format,
