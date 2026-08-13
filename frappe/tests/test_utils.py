@@ -66,11 +66,16 @@ from frappe.utils.data import (
 	evaluate_filters,
 	expand_relative_urls,
 	format_duration,
+	get_date_or_throw,
 	get_datetime,
+	get_datetime_or_throw,
+	get_first_day,
 	get_first_day_of_week,
+	get_quarter_start,
 	get_time,
 	get_timedelta,
 	get_timespan_date_range,
+	get_timestamp,
 	get_url_to_form,
 	get_year_ending,
 	getdate,
@@ -926,6 +931,56 @@ class TestDateUtils(IntegrationTestCase):
 	def test_is_last_day_of_the_month(self):
 		self.assertEqual(frappe.utils.is_last_day_of_the_month("2020-12-24"), False)
 		self.assertEqual(frappe.utils.is_last_day_of_the_month("2020-12-31"), True)
+
+	def test_getdate_returns_none_for_unparsable_dates(self):
+		# getdate()'s public contract is unchanged: zero-dates and non-string,
+		# non-date inputs return None rather than raising. Server Scripts and
+		# other callers outside this module rely on this. See issue #12175.
+		self.assertIsNone(getdate("0000-00-00"))
+		self.assertIsNone(getdate("0001-01-01"))
+		self.assertIsNone(getdate(20210107))
+		self.assertIsNone(getdate(b"2021-01-07"))
+
+	def test_get_date_or_throw_raises_instead_of_returning_none(self):
+		self.assertEqual(get_date_or_throw("2021-01-07"), getdate("2021-01-07"))
+		for bad_input in ("0000-00-00", "0001-01-01", 20210107):
+			with self.assertRaises(frappe.ValidationError):
+				get_date_or_throw(bad_input)
+
+	def test_get_datetime_or_throw_raises_instead_of_returning_none(self):
+		self.assertEqual(get_datetime_or_throw("2021-01-07 10:00:00"), get_datetime("2021-01-07 10:00:00"))
+		with self.assertRaises(frappe.ValidationError):
+			get_datetime_or_throw("0000-00-00")
+
+	def test_date_helpers_throw_on_zero_dates_instead_of_crashing(self):
+		# Previously these raised AttributeError/TypeError from deep inside the
+		# call chain (e.g. "'NoneType' object has no attribute 'month'") because
+		# getdate("0000-00-00") returns None and callers used it unchecked.
+		# They should now surface a clear ValidationError instead. See #12175.
+		for fn in (
+			get_first_day,
+			frappe.utils.get_last_day,
+			get_quarter_start,
+			get_year_ending,
+			get_timestamp,
+			frappe.utils.get_first_day_of_week,
+			frappe.utils.get_year_start,
+			frappe.utils.get_quarter_ending,
+		):
+			with self.assertRaises(frappe.ValidationError, msg=f"{fn.__name__} did not throw"):
+				fn("0000-00-00")
+
+		with self.assertRaises(frappe.ValidationError):
+			frappe.utils.date_diff("2021-01-07", "0000-00-00")
+
+		with self.assertRaises(frappe.ValidationError):
+			frappe.utils.month_diff("2021-01-07", "0000-00-00")
+
+		with self.assertRaises(frappe.ValidationError):
+			add_to_date("0000-00-00", days=1)
+
+		with self.assertRaises(frappe.ValidationError):
+			frappe.utils.format_date("0000-00-00")
 
 	def test_get_timezone_utc_offset(self):
 		self.assertEqual(frappe.utils.data.get_timezone_utc_offset("UTC"), "+00:00")

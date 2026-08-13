@@ -115,12 +115,25 @@ def is_invalid_date_string(date_string: str) -> bool:
 	)
 
 
+def throw_invalid_date(value: Any) -> typing.NoReturn:
+	"""Raise a uniform validation error for a value that cannot be read as a date."""
+	frappe.throw(
+		frappe._("{} is not a valid date string.").format(frappe.bold(value)),
+		title=frappe._("Invalid Date"),
+	)
+
+
 def getdate(
 	string_date: DateTimeLikeObject | None = None, parse_day_first: bool = False
 ) -> datetime.date | None:
 	"""
 	Convert string date (yyyy-mm-dd) to datetime.date object.
 	If no input is provided, current date is returned.
+
+	Returns None for zero-dates (e.g. "0000-00-00") and non-string, non-date
+	inputs. Use `get_date_or_throw` instead when the result will be used for
+	arithmetic or attribute access, so bad input fails here rather than as an
+	AttributeError further downstream.
 	"""
 	if not string_date:
 		return get_datetime().date()
@@ -141,10 +154,22 @@ def getdate(
 		try:
 			return parser.parse(string_date, dayfirst=parse_day_first).date()
 		except ParserError:
-			frappe.throw(
-				frappe._("{} is not a valid date string.").format(frappe.bold(string_date)),
-				title=frappe._("Invalid Date"),
-			)
+			throw_invalid_date(string_date)
+
+
+def get_date_or_throw(
+	string_date: DateTimeLikeObject | None = None, parse_day_first: bool = False
+) -> datetime.date:
+	"""Like `getdate`, but throws instead of returning None.
+
+	Use wherever the result is used for arithmetic or attribute access, so that
+	zero-dates ("0000-00-00") and non-string types fail at the point of bad
+	input rather than as an AttributeError several frames later.
+	"""
+	date = getdate(string_date, parse_day_first)
+	if date is None:
+		throw_invalid_date(string_date)
+	return date
 
 
 def get_datetime(
@@ -182,6 +207,16 @@ def get_datetime(
 		return datetime.datetime.fromisoformat(datetime_str)
 	except ValueError:
 		return parser.parse(datetime_str)
+
+
+def get_datetime_or_throw(
+	datetime_str: DateTimeLikeObject | None | tuple | list = None,
+) -> datetime.datetime:
+	"""Like `get_datetime`, but throws instead of returning None."""
+	dt = get_datetime(datetime_str)
+	if dt is None:
+		throw_invalid_date(datetime_str)
+	return dt
 
 
 def get_timedelta(time: str | datetime.timedelta | None = None) -> datetime.timedelta | None:
@@ -304,7 +339,7 @@ def add_to_date(
 		if " " in date:
 			as_datetime = True
 		try:
-			date = get_datetime(date)
+			date = get_datetime_or_throw(date)
 		except ParserError:
 			frappe.throw(frappe._("Please select a valid date filter"), title=frappe._("Invalid Date"))
 
@@ -343,13 +378,13 @@ def date_diff(string_ed_date: DateTimeLikeObject, string_st_date: DateTimeLikeOb
 
 def days_diff(string_ed_date: DateTimeLikeObject, string_st_date: DateTimeLikeObject) -> int:
 	"""Return the difference between given two dates in days."""
-	return (getdate(string_ed_date) - getdate(string_st_date)).days
+	return (get_date_or_throw(string_ed_date) - get_date_or_throw(string_st_date)).days
 
 
 def month_diff(string_ed_date: DateTimeLikeObject, string_st_date: DateTimeLikeObject) -> int:
 	"""Return the difference between given two dates in months."""
-	ed_date = getdate(string_ed_date)
-	st_date = getdate(string_st_date)
+	ed_date = get_date_or_throw(string_ed_date)
+	st_date = get_date_or_throw(string_st_date)
 	return (ed_date.year - st_date.year) * 12 + ed_date.month - st_date.month + 1
 
 
@@ -377,7 +412,7 @@ def get_timestamp(date: DateTimeLikeObject | None = None) -> float:
 	"""Return the Unix timestamp (seconds since Epoch) for the given `date`.
 	If `date` is None, the current timestamp is returned.
 	"""
-	return time.mktime(getdate(date).timetuple())
+	return time.mktime(get_date_or_throw(date).timetuple())
 
 
 def get_eta(from_time: DateTimeLikeObject, percent_complete) -> str:
@@ -480,7 +515,7 @@ def get_first_day(dt, d_years: int = 0, d_months: int = 0, as_str: bool = False)
 
 	Also, add `d_years` and `d_months` if specified.
 	"""
-	dt = getdate(dt)
+	dt = get_date_or_throw(dt)
 
 	# d_years, d_months are "deltas" to apply to dt
 	overflow_years, month = divmod(dt.month + d_months - 1, 12)
@@ -511,7 +546,7 @@ def get_quarter_start(dt: DateTimeLikeObject | None = None, as_str: bool = False
 
 	If `dt` is None, the current quarter start date is returned.
 	"""
-	date = getdate(dt)
+	date = get_date_or_throw(dt)
 	quarter = (date.month - 1) // 3 + 1
 	assert 1 <= quarter <= 4, "quarter must be in range 1..4 for a valid month"
 	first_date_of_quarter = datetime.date(date.year, ((quarter - 1) * 3) + 1, 1)
@@ -531,7 +566,7 @@ def get_first_day_of_week(dt: DateTimeLikeObject, as_str=False) -> datetime.date
 
 	If `as_str` is True, the first day of the week is returned as a string in `yyyy-mm-dd` format.
 	"""
-	dt = getdate(dt)
+	dt = get_date_or_throw(dt)
 	date = dt - datetime.timedelta(days=get_week_start_offset_days(dt))
 	return date.strftime(DATE_FORMAT) if as_str else date
 
@@ -561,7 +596,7 @@ def get_year_start(dt: DateTimeLikeObject, as_str: Literal[True] = False) -> str
 
 def get_year_start(dt: DateTimeLikeObject, as_str=False) -> str | datetime.date:
 	"""Return the start date of the year for the given date (`dt`)."""
-	dt = getdate(dt)
+	dt = get_date_or_throw(dt)
 	date = datetime.date(dt.year, 1, 1)
 	return date.strftime(DATE_FORMAT) if as_str else date
 
@@ -595,7 +630,7 @@ def get_last_day(dt):
 def is_last_day_of_the_month(dt):
 	last_day_of_the_month = get_last_day(dt)
 
-	return getdate(dt) == getdate(last_day_of_the_month)
+	return get_date_or_throw(dt) == get_date_or_throw(last_day_of_the_month)
 
 
 @typing.overload
@@ -614,13 +649,13 @@ def get_quarter_ending(date: DateTimeLikeObject | None = None, as_str=False) -> 
 	If `date` is None, the current quarter end date is returned.
 	If `as_str` is True, the end date of the quarter is returned as a string in `yyyy-mm-dd` format.
 	"""
-	date = getdate(date)
+	date = get_date_or_throw(date)
 
 	# find the earliest quarter ending date that is after
 	# the given date
 	for month in (3, 6, 9, 12):
-		quarter_end_month = getdate(f"{date.year}-{month}-01")
-		quarter_end_date = getdate(get_last_day(quarter_end_month))
+		quarter_end_month = get_date_or_throw(f"{date.year}-{month}-01")
+		quarter_end_date = get_date_or_throw(get_last_day(quarter_end_month))
 		if date <= quarter_end_date:
 			date = quarter_end_date
 			break
@@ -644,7 +679,7 @@ def get_year_ending(date: DateTimeLikeObject | None = None, as_str=False) -> dat
 	If `date` is None, the current year end date is returned.
 	If `as_str` is True, the end date of the year is returned as a string in `yyyy-mm-dd` format.
 	"""
-	date = getdate(date)
+	date = get_date_or_throw(date)
 	next_year_start = datetime.date(date.year + 1, 1, 1)
 	year_ending = add_to_date(next_year_start, days=-1)
 	return year_ending.strftime(DATE_FORMAT) if as_str else year_ending
@@ -736,7 +771,7 @@ def format_date(string_date=None, format_string: str | None = None, parse_day_fi
 	if not string_date:
 		return ""
 
-	date = getdate(string_date, parse_day_first)
+	date = get_date_or_throw(string_date, parse_day_first)
 	if not format_string:
 		format_string = get_user_date_format()
 	format_string = format_string.replace("mm", "MM").replace("Y", "y")
