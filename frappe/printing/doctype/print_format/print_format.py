@@ -27,6 +27,9 @@ BUILDER_DRAFT_FIELDS = (
 	"margin_right",
 	"label_color",
 	"value_color",
+	"page_size",
+	"page_height",
+	"page_width",
 	# written once when a classic format is converted on open
 	"classic_format_data",
 	"print_format_builder",
@@ -66,9 +69,45 @@ class PrintFormat(Document):
 		margin_right: DF.Float
 		margin_top: DF.Float
 		module: DF.Link | None
+		page_height: DF.Float
 		page_number: DF.Literal[
 			"Hide", "Top Left", "Top Center", "Top Right", "Bottom Left", "Bottom Center", "Bottom Right"
 		]
+		page_size: DF.Literal[
+			"",
+			"A0",
+			"A1",
+			"A2",
+			"A3",
+			"A4",
+			"A5",
+			"A6",
+			"A7",
+			"A8",
+			"A9",
+			"B0",
+			"B1",
+			"B2",
+			"B3",
+			"B4",
+			"B5",
+			"B6",
+			"B7",
+			"B8",
+			"B9",
+			"B10",
+			"C5E",
+			"Comm10E",
+			"DLE",
+			"Executive",
+			"Folio",
+			"Ledger",
+			"Legal",
+			"Letter",
+			"Tabloid",
+			"Custom",
+		]
+		page_width: DF.Float
 		pdf_generator: DF.Literal["wkhtmltopdf", "chrome"]
 		print_format_builder: DF.Check
 		print_format_builder_beta: DF.Check
@@ -148,8 +187,14 @@ class PrintFormat(Document):
 		if self.print_format_for == "Report" and not self.report:
 			frappe.throw(_("{0} is required").format(frappe.bold(_("Report"))), frappe.MandatoryError)
 
+		self.validate_page_size()
 		self.validate_colors()
 		self.validate_conditions()
+
+	def validate_page_size(self):
+		"""Mirrors Print Settings' own check: a custom size is meaningless without dimensions."""
+		if self.page_size == "Custom" and not (self.page_height and self.page_width):
+			frappe.throw(_("Page height and width cannot be zero"))
 
 	def validate_conditions(self):
 		"""Reject a layout whose visibility conditions cannot compile.

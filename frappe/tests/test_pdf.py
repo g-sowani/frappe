@@ -96,6 +96,73 @@ class TestPdf(IntegrationTestCase):
 		self.assertGreaterEqual(len(pdf), 10_000)
 
 
+class TestResolvePageSize(IntegrationTestCase):
+	"""A Print Format's own Page Size, when set, overrides the site-wide default —
+	see https://github.com/frappe/frappe/issues/19918."""
+
+	def make_print_format(self, **kwargs):
+		frappe.delete_doc("Print Format", "_Test Page Size Format", force=True, ignore_missing=True)
+		doc = frappe.get_doc(
+			{
+				"doctype": "Print Format",
+				"name": "_Test Page Size Format",
+				"doc_type": "ToDo",
+				"print_format_builder_beta": 1,
+				"format_data": frappe.as_json({"sections": [], "header": {}, "footer": {}}),
+				**kwargs,
+			}
+		).insert()
+		self.addCleanup(frappe.delete_doc, "Print Format", doc.name, force=True)
+		return doc
+
+	def test_print_format_override_wins_over_print_settings(self):
+		from frappe.tests.classes.context_managers import change_settings
+
+		pf = self.make_print_format(page_size="A5")
+		with change_settings("Print Settings", pdf_page_size="Letter"):
+			size, height, width = pdfgen.resolve_page_size(pf.name)
+		self.assertEqual(size, "A5")
+		# height/width are only meaningful for "Custom" — A5 leaves them unset (0.0)
+		self.assertFalse(height)
+		self.assertFalse(width)
+
+	def test_falls_back_to_print_settings_when_format_has_no_override(self):
+		from frappe.tests.classes.context_managers import change_settings
+
+		pf = self.make_print_format()  # page_size left blank
+		with change_settings("Print Settings", pdf_page_size="Letter"):
+			size, _, _ = pdfgen.resolve_page_size(pf.name)
+		self.assertEqual(size, "Letter")
+
+	def test_falls_back_to_a4_when_nothing_is_set(self):
+		from frappe.tests.classes.context_managers import change_settings
+
+		with change_settings("Print Settings", pdf_page_size=""):
+			size, _, _ = pdfgen.resolve_page_size(None)
+		self.assertEqual(size, "A4")
+
+	def test_custom_dimensions_carried_from_the_print_format(self):
+		pf = self.make_print_format(page_size="Custom", page_height=100, page_width=150)
+		size, height, width = pdfgen.resolve_page_size(pf.name)
+		self.assertEqual(size, "Custom")
+		self.assertEqual(height, 100)
+		self.assertEqual(width, 150)
+
+	def test_missing_or_deleted_print_format_falls_back_gracefully(self):
+		size, _, _ = pdfgen.resolve_page_size("_Does Not Exist")
+		self.assertEqual(size, frappe.db.get_single_value("Print Settings", "pdf_page_size") or "A4")
+
+	def test_prepare_options_honours_print_format_override(self):
+		pf = self.make_print_format(page_size="A5")
+		_, options = pdfgen.prepare_options("<p>hi</p>", {}, print_format=pf.name)
+		self.assertEqual(options["page-size"], "A5")
+
+	def test_explicit_option_still_wins_over_print_format(self):
+		pf = self.make_print_format(page_size="A5")
+		_, options = pdfgen.prepare_options("<p>hi</p>", {"page-size": "Legal"}, print_format=pf.name)
+		self.assertEqual(options["page-size"], "Legal")
+
+
 class TestChromePdfGeometry(IntegrationTestCase):
 	"""Unit tests for Browser paper geometry — no chromium process involved."""
 

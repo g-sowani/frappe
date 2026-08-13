@@ -41,6 +41,32 @@
 		</div>
 
 		<div class="form-group">
+			<label class="control-label">{{ __("Page Size") }}</label>
+			<select class="form-control form-control-sm" v-model="print_format.page_size">
+				<option value="">{{ __("Default (Print Settings)") }}</option>
+				<option v-for="s in page_sizes" :key="s" :value="s">{{ s }}</option>
+			</select>
+		</div>
+
+		<div class="form-group" v-if="print_format.page_size === 'Custom'">
+			<label class="control-label">{{ __("Custom Page Size (mm)") }}</label>
+			<div class="pfb-margin-grid">
+				<div class="pfb-margin-cell" v-for="df in custom_page_size" :key="df.fieldname">
+					<label class="pfb-margin-label control-label">{{ df.label }}</label>
+					<input
+						type="number"
+						class="form-control form-control-sm"
+						:value="print_format[df.fieldname]"
+						min="0"
+						@change="
+							(e) => (print_format[df.fieldname] = parseFloat(e.target.value) || 0)
+						"
+					/>
+				</div>
+			</div>
+		</div>
+
+		<div class="form-group">
 			<label class="pfb-insp-check">
 				<input
 					type="checkbox"
@@ -80,6 +106,47 @@ let margins = computed(() => [
 	{ label: __("Bottom"), fieldname: "margin_bottom" },
 	{ label: __("Left", null, "alignment"), fieldname: "margin_left" },
 	{ label: __("Right", null, "alignment"), fieldname: "margin_right" },
+]);
+
+// Same catalogue as the Print Settings "PDF Page Size" select — kept in sync
+// with the `page_size` field options on the Print Format doctype.
+const page_sizes = [
+	"A0",
+	"A1",
+	"A2",
+	"A3",
+	"A4",
+	"A5",
+	"A6",
+	"A7",
+	"A8",
+	"A9",
+	"B0",
+	"B1",
+	"B2",
+	"B3",
+	"B4",
+	"B5",
+	"B6",
+	"B7",
+	"B8",
+	"B9",
+	"B10",
+	"C5E",
+	"Comm10E",
+	"DLE",
+	"Executive",
+	"Folio",
+	"Ledger",
+	"Legal",
+	"Letter",
+	"Tabloid",
+	"Custom",
+];
+
+let custom_page_size = computed(() => [
+	{ label: __("Height"), fieldname: "page_height" },
+	{ label: __("Width"), fieldname: "page_width" },
 ]);
 
 let page_number_positions = computed(() => [

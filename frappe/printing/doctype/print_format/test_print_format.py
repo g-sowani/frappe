@@ -864,6 +864,74 @@ class TestPrintFormatChildTableVisibility(IntegrationTestCase):
 		self.assertIn('data-fieldname="email_id"', html)
 
 
+class TestPrintFormatPageSize(IntegrationTestCase):
+	"""A print format may pick its own paper size, overriding Print Settings —
+	see https://github.com/frappe/frappe/issues/19918."""
+
+	def make(self, **kwargs):
+		frappe.delete_doc("Print Format", "_Test PF Page Size", force=True, ignore_missing=True)
+		doc = frappe.get_doc(
+			{
+				"doctype": "Print Format",
+				"name": "_Test PF Page Size",
+				"doc_type": "ToDo",
+				"print_format_builder_beta": 1,
+				"format_data": frappe.as_json({"sections": [], "header": {}, "footer": {}}),
+				**kwargs,
+			}
+		)
+		self.addCleanup(frappe.delete_doc, "Print Format", doc.name, force=True, ignore_missing=True)
+		return doc
+
+	def test_custom_page_size_requires_dimensions(self):
+		doc = self.make(page_size="Custom")
+		self.assertRaises(frappe.ValidationError, doc.insert)
+
+		doc.page_height = 100
+		doc.page_width = 150
+		doc.insert()  # no longer raises
+
+	def test_named_page_size_does_not_require_dimensions(self):
+		doc = self.make(page_size="A5")
+		doc.insert()
+		self.assertEqual(doc.page_size, "A5")
+
+	def test_blank_page_size_is_the_default(self):
+		"""A fresh print format inherits Print Settings, not a fixed size."""
+		doc = self.make()
+		doc.insert()
+		self.assertEqual(doc.page_size, "")
+
+	def test_generator_context_reflects_the_override(self):
+		"""The Redesign renderer's @page CSS and layout width follow the format's
+		own Page Size, not just the site-wide default — both PDF engines read
+		options off this same rendered CSS."""
+		from frappe.printing.doctype.print_format.classic_converter import get_default_print_format
+		from frappe.tests.classes.context_managers import change_settings
+		from frappe.utils.print_format_generator import PrintFormatGenerator
+
+		doc = self.make(page_size="A5")
+		doc.insert()
+
+		todo = frappe.get_doc({"doctype": "ToDo", "description": "Page size test"}).insert(
+			ignore_permissions=True
+		)
+		self.addCleanup(todo.delete, ignore_permissions=True)
+
+		with change_settings("Print Settings", pdf_page_size="Letter"):
+			generator = PrintFormatGenerator(doc, todo)
+			self.assertEqual(generator.context.pdf_page_size, "A5")
+			self.assertEqual(generator.context.page_width, 148)
+			html = generator.get_html_preview()
+		self.assertIn("size: A5 portrait;", html)
+
+		# and an unset format still falls back to Print Settings
+		default_doc = get_default_print_format("ToDo")
+		with change_settings("Print Settings", pdf_page_size="Letter"):
+			generator = PrintFormatGenerator(default_doc, todo)
+			self.assertEqual(generator.context.pdf_page_size, "Letter")
+
+
 class TestPrintFormatDraft(IntegrationTestCase):
 	"""The builder parks edits in draft_data; only Save & Apply touches what prints."""
 

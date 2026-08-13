@@ -103,9 +103,14 @@ def pdf_footer_html(soup, head, content, styles, html_id, css, path=None):
 	)
 
 
-def get_pdf(html, options=None, output: PdfWriter | None = None):
+def get_pdf(
+	html,
+	options=None,
+	output: PdfWriter | None = None,
+	print_format: str | None = None,
+):
 	html = scrub_urls(html)
-	html, options = prepare_options(html, options)
+	html, options = prepare_options(html, options, print_format)
 
 	options.update({"disable-javascript": "", "disable-local-file-access": ""})
 
@@ -198,7 +203,52 @@ def get_file_data_from_writer(writer_obj):
 	return stream.read()
 
 
-def prepare_options(html, options):
+def resolve_page_size(
+	print_format: str | dict | None = None, print_settings: dict | None = None
+) -> tuple[str, float | None, float | None]:
+	"""Return the (page_size, page_height_mm, page_width_mm) that applies to a print job.
+
+	Precedence: the print format's own Page Size override (if any) beats the
+	site-wide Print Settings default, which beats a hard-coded "A4" fallback.
+	Height/width are only meaningful when the resolved size is "Custom" — every
+	other name carries its own fixed dimensions.
+
+	`print_format` may be a Print Format name, or a Document/dict exposing
+	page_size/page_height/page_width (e.g. a builder draft) — or None/"" to
+	skip straight to the Print Settings default.
+
+	`print_settings` lets a caller that already holds the Print Settings
+	document (or an override dict, see `get_allowed_print_settings_override`)
+	pass it in instead of triggering another lookup.
+	"""
+	page_size = page_height = page_width = None
+
+	if isinstance(print_format, str):
+		if print_format:
+			row = frappe.get_cached_value(
+				"Print Format", print_format, ["page_size", "page_height", "page_width"]
+			)
+			if row:
+				page_size, page_height, page_width = row
+	elif print_format is not None:
+		page_size = print_format.get("page_size")
+		page_height = print_format.get("page_height")
+		page_width = print_format.get("page_width")
+
+	if not page_size:
+		if print_settings is not None:
+			page_size = print_settings.get("pdf_page_size")
+			page_height = print_settings.get("pdf_page_height")
+			page_width = print_settings.get("pdf_page_width")
+		else:
+			page_size = frappe.db.get_single_value("Print Settings", "pdf_page_size")
+			page_height = frappe.db.get_single_value("Print Settings", "pdf_page_height")
+			page_width = frappe.db.get_single_value("Print Settings", "pdf_page_width")
+
+	return page_size or "A4", page_height, page_width
+
+
+def prepare_options(html, options, print_format: str | None = None):
 	if not options:
 		options = {}
 
@@ -228,17 +278,12 @@ def prepare_options(html, options):
 	html = inline_private_images(html)
 
 	# page size
-	pdf_page_size = (
-		options.get("page-size") or frappe.db.get_single_value("Print Settings", "pdf_page_size") or "A4"
-	)
+	default_page_size, default_page_height, default_page_width = resolve_page_size(print_format)
+	pdf_page_size = options.get("page-size") or default_page_size
 
 	if pdf_page_size == "Custom":
-		options["page-height"] = options.get("page-height") or frappe.db.get_single_value(
-			"Print Settings", "pdf_page_height"
-		)
-		options["page-width"] = options.get("page-width") or frappe.db.get_single_value(
-			"Print Settings", "pdf_page_width"
-		)
+		options["page-height"] = options.get("page-height") or default_page_height
+		options["page-width"] = options.get("page-width") or default_page_width
 	else:
 		options["page-size"] = pdf_page_size
 

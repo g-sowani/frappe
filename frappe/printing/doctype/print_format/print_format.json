@@ -37,6 +37,11 @@
   "value_color",
   "page_number",
   "show_label_colon",
+  "page_size_section",
+  "page_size",
+  "column_break_page_size",
+  "page_height",
+  "page_width",
   "css_section",
   "css",
   "custom_html_help",
@@ -188,6 +193,37 @@
    "label": "Value Color"
   },
   {
+   "collapsible": 1,
+   "fieldname": "page_size_section",
+   "fieldtype": "Section Break",
+   "label": "Page Size"
+  },
+  {
+   "description": "Overrides the paper size configured in Print Settings, for this print format only. Leave blank to use the site-wide default.",
+   "fieldname": "page_size",
+   "fieldtype": "Select",
+   "label": "Page Size",
+   "options": "\nA0\nA1\nA2\nA3\nA4\nA5\nA6\nA7\nA8\nA9\nB0\nB1\nB2\nB3\nB4\nB5\nB6\nB7\nB8\nB9\nB10\nC5E\nComm10E\nDLE\nExecutive\nFolio\nLedger\nLegal\nLetter\nTabloid\nCustom"
+  },
+  {
+   "fieldname": "column_break_page_size",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:doc.page_size == \"Custom\"",
+   "fieldname": "page_height",
+   "fieldtype": "Float",
+   "label": "Page Height (in mm)",
+   "mandatory_depends_on": "eval:doc.page_size == \"Custom\""
+  },
+  {
+   "depends_on": "eval:doc.page_size == \"Custom\"",
+   "fieldname": "page_width",
+   "fieldtype": "Float",
+   "label": "Page Width (in mm)",
+   "mandatory_depends_on": "eval:doc.page_size == \"Custom\""
+  },
+  {
    "depends_on": "eval:!doc.raw_printing",
    "fieldname": "css_section",
    "fieldtype": "Section Break"
@@ -333,7 +369,7 @@
  "icon": "fa fa-print",
  "idx": 1,
  "links": [],
- "modified": "2026-08-06 22:20:02.304442",
+ "modified": "2026-08-13 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Printing",
  "name": "Print Format",

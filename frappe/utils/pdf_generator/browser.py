@@ -4,12 +4,13 @@ from bs4 import BeautifulSoup
 
 import frappe
 from frappe.utils.data import cint
-from frappe.utils.pdf import get_host_url
+from frappe.utils.pdf import get_host_url, resolve_page_size
 from frappe.utils.print_utils import convert_uom, parse_float_and_unit
 
 
 class Browser:
 	def __init__(self, generator, print_format, html, options):
+		self.print_format = print_format
 		self.is_print_designer = frappe.get_cached_value("Print Format", print_format, "print_designer")
 		self.debug_mode = frappe.conf.developer_mode and bool(frappe.form_dict.get("pdf_debug"))
 		self.browserID = frappe.utils.random_string(10)
@@ -237,22 +238,20 @@ class Browser:
 
 	def _set_default_page_size(self):
 		options = self.options
-		pdf_page_size = (
-			options.get("page-size") or frappe.db.get_single_value("Print Settings", "pdf_page_size") or "A4"
-		)
+		# `getattr` because tests build a Browser via `__new__` and skip __init__
+		default_size, default_height, default_width = resolve_page_size(getattr(self, "print_format", None))
+		pdf_page_size = options.get("page-size") or default_size
 
 		if pdf_page_size == "Custom":
 			options["page-size"] = pdf_page_size
-			# Print Settings stores these in mm; downstream expects px like the
-			# named-size branch in prepare_options_for_pdf.
-			for dimension, fieldname in (
-				("page-height", "pdf_page_height"),
-				("page-width", "pdf_page_width"),
+			# Print Format/Print Settings store these in mm; downstream expects px
+			# like the named-size branch in prepare_options_for_pdf.
+			for dimension, value in (
+				("page-height", default_height),
+				("page-width", default_width),
 			):
-				if not options.get(dimension):
-					value = frappe.db.get_single_value("Print Settings", fieldname)
-					if value:
-						options[dimension] = convert_uom(value, "mm", "px", only_number=True)
+				if not options.get(dimension) and value:
+					options[dimension] = convert_uom(value, "mm", "px", only_number=True)
 		else:
 			options["page-size"] = pdf_page_size
 

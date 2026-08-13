@@ -8,6 +8,8 @@ import frappe
 from frappe import _
 from frappe.utils.data import cint
 from frappe.utils.jinja_globals import is_rtl
+from frappe.utils.pdf import resolve_page_size
+from frappe.utils.pdf_generator.browser import PageSize
 
 
 @frappe.whitelist()
@@ -296,8 +298,15 @@ class PrintFormatGenerator:
 
 		run_before_print(self.doc, self.print_settings.as_dict())
 
-		page_width_map = {"A4": 210, "Letter": 216}
-		page_width = page_width_map.get(self.print_settings.pdf_page_size) or 210
+		pdf_page_size, pdf_page_height, pdf_page_width = resolve_page_size(
+			self.print_format, self.print_settings
+		)
+		if pdf_page_size == "Custom" and pdf_page_width and pdf_page_height:
+			page_width, page_height = pdf_page_width, pdf_page_height
+		else:
+			named_size = PageSize.get(pdf_page_size)
+			page_width = named_size["width"] if named_size else 210
+			page_height = named_size["height"] if named_size else 297
 		body_width = page_width - self.print_format.margin_left - self.print_format.margin_right
 		style_name = self.style or self.print_settings.print_style
 		print_style = (
@@ -312,7 +321,11 @@ class PrintFormatGenerator:
 				"print_settings": self.print_settings,
 				"print_style": print_style,
 				"letterhead": self.letterhead,
+				"pdf_page_size": pdf_page_size,
+				"pdf_page_height": pdf_page_height,
+				"pdf_page_width": pdf_page_width,
 				"page_width": page_width,
+				"page_height": page_height,
 				"body_width": body_width,
 				"lang": frappe.local.lang,
 				"layout_direction": "rtl" if is_rtl() else "ltr",

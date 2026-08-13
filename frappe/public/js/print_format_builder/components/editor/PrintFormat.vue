@@ -79,12 +79,27 @@ import { computed, inject, watch, nextTick, onMounted, onUnmounted, ref } from "
 let { layout, letterhead, print_format } = useStore();
 let store = inject("$store");
 
-const PAGE_SIZES_MM = { A4: [210, 297], Letter: [216, 279.4] };
-let page_size = ref("A4");
+// Named sizes the canvas can render without asking the server; matches the
+// options on the "Page Size" select (PrintSettingsPanel.vue) closely enough
+// to cover common paper — anything else falls back to A4, same as before.
+const PAGE_SIZES_MM = {
+	A3: [297, 420],
+	A4: [210, 297],
+	A5: [148, 210],
+	B4: [250, 353],
+	B5: [176, 250],
+	Legal: [216, 356],
+	Letter: [216, 279.4],
+	Tabloid: [279, 432],
+	Ledger: [432, 279],
+};
+
+// Site-wide default, used until the format sets its own Page Size override
+let settings_page_size = ref("A4");
 
 onMounted(() => {
 	frappe.db.get_single_value("Print Settings", "pdf_page_size").then((v) => {
-		if (v && PAGE_SIZES_MM[v]) page_size.value = v;
+		if (v && PAGE_SIZES_MM[v]) settings_page_size.value = v;
 	});
 });
 
@@ -164,8 +179,21 @@ let rootStyles = computed(() => {
 		margin_bottom = 0,
 		margin_left = 0,
 		margin_right = 0,
+		page_size: format_page_size,
+		page_height,
+		page_width,
 	} = print_format.value;
-	const [page_w, page_h] = PAGE_SIZES_MM[page_size.value] || PAGE_SIZES_MM.A4;
+
+	let page_w, page_h;
+	if (format_page_size === "Custom" && page_height && page_width) {
+		[page_w, page_h] = [page_width, page_height];
+	} else {
+		[page_w, page_h] =
+			PAGE_SIZES_MM[format_page_size] ||
+			PAGE_SIZES_MM[settings_page_size.value] ||
+			PAGE_SIZES_MM.A4;
+	}
+
 	return {
 		padding: `${margin_top}mm ${margin_right}mm ${margin_bottom}mm ${margin_left}mm`,
 		width: `${page_w}mm`,

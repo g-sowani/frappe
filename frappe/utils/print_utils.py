@@ -132,7 +132,7 @@ def get_print(
 	for hook in frappe.get_hooks("on_print_pdf"):
 		frappe.call(hook, doctype=doctype, name=name, print_format=print_format)
 
-	return get_pdf(html, options=pdf_options, output=output)
+	return get_pdf(html, options=pdf_options, output=output, print_format=print_format)
 
 
 def attach_print(
@@ -186,7 +186,11 @@ def attach_print(
 			if cint(print_settings.send_print_as_pdf):
 				ext = ".pdf"
 				if html:
-					content = get_pdf(html, options={"password": password} if password else None)
+					content = get_pdf(
+						html,
+						options={"password": password} if password else None,
+						print_format=print_format,
+					)
 				elif render_via_generator:
 					from frappe.utils.print_format_generator import PrintFormatGenerator
 					from frappe.www.printview import validate_print_for_docstatus
