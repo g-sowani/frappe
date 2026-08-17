@@ -45,8 +45,11 @@ export default class GoogleDrivePicker {
 		const docsView = new google.picker.DocsView();
 		docsView.setParent("root"); // show the root folder by default
 		docsView.setIncludeFolders(true); // also show folders, not just files
+		docsView.setEnableTeamDrives(true); // allow browsing into shared/team drives
+		docsView.setIncludeTeamDrives(true); // list files from shared/team drives
 
 		this.picker = new google.picker.PickerBuilder()
+			.enableFeature(google.picker.Feature.SUPPORT_TEAM_DRIVES) // adds a "Shared drives" tab
 			.setAppId(this.appId)
 			.setOAuthToken(access_token)
 			.addView(docsView)
