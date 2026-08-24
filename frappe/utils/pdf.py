@@ -5,6 +5,7 @@ import contextlib
 import io
 import mimetypes
 import os
+import re
 import subprocess
 from urllib.parse import parse_qs, urlparse
 
@@ -287,6 +288,54 @@ def read_options_from_html(html):
 	return str(soup), options
 
 
+_BOX_SIDES = ("top", "right", "bottom", "left")
+
+# A plain CSS length/number ("0", "5mm", "-1.5in", "50%"). Excludes keywords
+# like "auto"/"inherit" — parse_float_and_unit() (which both pdf generators
+# feed a margin value through) has no digit to find in those and raises
+# AttributeError, so they must never reach an expanded margin-* property.
+_LENGTH_RE = re.compile(r"^[+-]?(\d*\.)?\d+[a-z%]*$", re.IGNORECASE)
+
+
+def _expand_box_shorthand(prop: cssutils.css.Property) -> list[cssutils.css.Property]:
+	"""Expand a CSS box shorthand (currently: margin) into its longhand sides.
+
+	cssutils doesn't do this itself — `margin: 0` parses as one Property named
+	"margin", which the exact-name filter in read_options_from_html() silently
+	drops. Non-shorthand / malformed values pass through unchanged.
+	"""
+	if prop.name != "margin":
+		return [prop]
+
+	if "(" in prop.value:
+		# A function value (calc(), var(), min()/max(), ...) can itself contain
+		# spaces, so a bare .split() would slice it apart into bogus fragments
+		# instead of the side values it's supposed to separate.
+		return [prop]
+
+	parts = prop.value.split()
+	if not all(_LENGTH_RE.match(part) for part in parts):
+		# e.g. "auto" (common for centering a preview) or another keyword —
+		# not a page-margin value; leave unexpanded so it keeps being ignored
+		# exactly like before this function existed.
+		return [prop]
+	# Standard CSS box shorthand: 1/2/3-value forms reuse earlier values for the
+	# sides they omit; normalize to the 4-value top/right/bottom/left form.
+	if len(parts) == 1:
+		parts = parts * 4
+	elif len(parts) == 2:
+		parts = [parts[0], parts[1], parts[0], parts[1]]
+	elif len(parts) == 3:
+		parts = [parts[0], parts[1], parts[2], parts[1]]
+	elif len(parts) != 4:
+		return [prop]
+
+	return [
+		cssutils.css.Property(name=f"margin-{side}", value=value, priority=prop.priority)
+		for side, value in zip(_BOX_SIDES, parts, strict=True)
+	]
+
+
 def get_print_format_styles(soup: BeautifulSoup) -> list[cssutils.css.Property]:
 	"""
 	Get styles purely on class 'print-format'.
@@ -320,7 +369,8 @@ def get_print_format_styles(soup: BeautifulSoup) -> list[cssutils.css.Property]:
 		# Allow only .print-format { ... } and .print-format, p { ... }
 		# Disallow .print-format p { ... } and .print-format > p { ... }
 		if ".print-format" in [x.strip() for x in rule.selectorText.split(",")]:
-			valid_styles.extend(entry for entry in rule.style)
+			for entry in rule.style:
+				valid_styles.extend(_expand_box_shorthand(entry))
 
 	return valid_styles
 
