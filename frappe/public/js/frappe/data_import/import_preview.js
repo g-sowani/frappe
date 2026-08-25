@@ -139,30 +139,12 @@ frappe.data_import.ImportPreview = class ImportPreview {
 			this.datatable.destroy();
 		}
 
-		this.datatable = new DataTable(this.$table_preview.get(0), {
-			data: this.data,
-			columns: this.columns,
-			layout: "fixed",
-			cellHeight: 35,
-			language: frappe.boot.lang,
-			translations: frappe.utils.datatable.get_translations(),
-			serialNoColumn: false,
-			checkboxColumn: false,
-			noDataMessage: __("No Data"),
-			disableReorderColumn: true,
-		});
-
+		this.datatable = render_preview_datatable(
+			this.$table_preview.get(0),
+			this.data,
+			this.columns
+		);
 		this.render_table_message();
-
-		if (this.data.length === 0) {
-			this.datatable.style.setStyle(".dt-scrollable", {
-				height: "auto",
-			});
-		}
-
-		this.datatable.style.setStyle(".dt-dropdown", {
-			display: "none",
-		});
 	}
 
 	/** Scroll to and highlight a sheet row in the table preview. */
@@ -371,6 +353,31 @@ frappe.data_import.ImportPreview = class ImportPreview {
 		});
 	}
 };
+
+/** Build the preview DataTable. Shared by the Data Import tool's own preview
+ * and the grid bulk-edit wizard so the two tables look and behave the same --
+ * only the column definitions differ between them. */
+export function render_preview_datatable(el, data, columns) {
+	const datatable = new DataTable(el, {
+		data,
+		columns,
+		layout: "fixed",
+		cellHeight: 35,
+		language: frappe.boot.lang,
+		translations: frappe.utils.datatable.get_translations(),
+		serialNoColumn: false,
+		checkboxColumn: false,
+		noDataMessage: __("No Data"),
+		disableReorderColumn: true,
+	});
+
+	if (data.length === 0) {
+		datatable.style.setStyle(".dt-scrollable", { height: "auto" });
+	}
+	datatable.style.setStyle(".dt-dropdown", { display: "none" });
+
+	return datatable;
+}
 
 function get_fields_as_options(doctype, column_map) {
 	let keys = [doctype];

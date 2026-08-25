@@ -1,10 +1,10 @@
 frappe.provide("frappe.data_import");
 
-function is_insert_import_type(import_type) {
+export function is_insert_import_type(import_type) {
 	return import_type === "Insert New Records";
 }
 
-function is_update_import_type(import_type) {
+export function is_update_import_type(import_type) {
 	return import_type === "Update Existing Records" || import_type === "Insert or Update Records";
 }
 

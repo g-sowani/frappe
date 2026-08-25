@@ -153,14 +153,9 @@ export default class Grid {
 						</div>
 						<div class="grid-bulk-actions text-right">
 							${frappe.ui.button.html({
-								label: __("Download"),
+								label: __("Bulk Edit"),
 								size: "sm",
-								css_class: "grid-download hidden",
-							})}
-							${frappe.ui.button.html({
-								label: __("Upload"),
-								size: "sm",
-								css_class: "grid-upload hidden",
+								css_class: "grid-bulk-edit hidden",
 							})}
 						</div>
 					</div>
@@ -834,7 +829,7 @@ export default class Grid {
 		// don't be tempted to use the `.hidden` class here
 		// it is used in other logic for the same buttons and will cause conflicts
 		this.wrapper
-			.find(".grid-add-row, .grid-add-multiple-rows, .grid-upload")
+			.find(".grid-add-row, .grid-add-multiple-rows")
 			.toggleClass("d-none", !is_editable);
 	}
 
@@ -1647,21 +1642,23 @@ export default class Grid {
 
 	setup_allow_bulk_edit() {
 		if (this.frm && this.frm.get_docfield(this.df.fieldname)?.allow_bulk_edit) {
-			this.setup_download();
-			this.setup_upload();
+			this.setup_bulk_edit();
 		}
 	}
 
-	// Download/upload a CSV or Excel bulk-edit template for this table, scoped to
-	// whichever columns the user picks. Both are handled by
-	// `frappe.core.doctype.data_import.grid_bulk_edit` on the server and
-	// `frappe.data_import.GridBulkEditDialog` on the client (lazy-loaded, like the
-	// rest of the Data Import tooling) so the CSV/Excel reading and writing isn't
-	// re-implemented here a second time.
-	setup_download() {
+	// Single "Bulk Edit" entry point for this table: pick an Import Type, then
+	// either download a CSV/Excel template (scoped to whichever columns the
+	// user picks) or attach a filled-in one and preview it before it's applied
+	// here. Handled by `frappe.core.doctype.data_import.grid_bulk_edit` on the
+	// server and `frappe.data_import.GridBulkEditDialog` on the client
+	// (lazy-loaded, like the rest of the Data Import tooling) so none of that
+	// CSV/Excel reading and writing is re-implemented here a second time.
+	setup_bulk_edit() {
+		let me = this;
 		let title = this.df.label || frappe.model.unscrub(this.df.fieldname);
+		frappe.flags.no_socketio = true;
 		$(this.wrapper)
-			.find(".grid-download")
+			.find(".grid-bulk-edit")
 			.removeClass("hidden")
 			.on("click", () => {
 				frappe.require("data_import_tools.bundle.js", () => {
@@ -1671,72 +1668,67 @@ export default class Grid {
 						child_doctype: this.df.options,
 						docname: this.frm.docname,
 						title,
+						editable: this.is_editable(),
 						get_rows: () => this.frm.doc[this.df.fieldname] || [],
+						on_update: (rows, import_type) =>
+							me.load_bulk_edit_rows(rows, import_type),
 					});
 				});
 				return false;
 			});
 	}
 
-	setup_upload() {
-		let me = this;
-		frappe.flags.no_socketio = true;
-		$(this.wrapper)
-			.find(".grid-upload")
-			.removeClass("hidden")
-			.on("click", () => {
-				new frappe.ui.FileUploader({
-					as_dataurl: true,
-					allow_multiple: false,
-					restrictions: {
-						allowed_file_types: [".csv", ".xlsx"],
-					},
-					on_success(file) {
-						frappe.require("data_import_tools.bundle.js", () => {
-							frappe.data_import
-								.upload_grid_bulk_edit_file({
-									doctype: me.frm.doctype,
-									fieldname: me.df.fieldname,
-									docname: me.frm.docname,
-									file,
-								})
-								.then((rows) => me.load_bulk_edit_rows(rows || []));
-						});
-					},
-				});
-				return false;
-			});
-	}
-
-	load_bulk_edit_rows(rows) {
+	load_bulk_edit_rows(rows, import_type) {
 		// Rows only carry the columns that were actually in the uploaded template
 		// (see GridBulkEditImporter.parse_row). For any other field of this child
-		// doctype, keep whatever the row at that position already had instead of
-		// wiping it -- otherwise bulk-editing with only a few columns selected
-		// silently blanks out every column you didn't pick for every row.
+		// doctype, keep whatever the matched row already had instead of wiping it
+		// -- otherwise bulk-editing with only a few columns selected silently
+		// blanks out every column you didn't pick for every row.
 		const existing_rows = this.frm.doc[this.df.fieldname] || [];
 		const fieldnames = frappe.get_meta(this.df.options).fields.map((df) => df.fieldname);
+		const is_insert = import_type === "Insert New Records";
+		const is_update = import_type === "Update Existing Records";
 
-		this.frm.clear_table(this.df.fieldname);
-		rows.forEach((row, i) => {
+		const apply_fields = (target, row) => {
+			fieldnames.forEach((fieldname) => {
+				if (fieldname in row) {
+					target[fieldname] = row[fieldname];
+				}
+			});
+		};
+
+		const add_row = (row) => {
 			const d = this.frm.add_child(this.df.fieldname);
 			// `frm.add_child()` (unlike the Grid's own "Add Row" button, see
 			// add_new_row()) never fires the `<fieldname>_add` script event, which
 			// some doctypes rely on to set up a new row -- e.g. Customize Form's
 			// `fields_add` stamps `is_custom_field`/`is_system_generated` on every
 			// new field, without which the field silently never gets created. Fire
-			// it here too, before the merge below overwrites it back to the old
-			// row's values for rows that aren't actually new.
+			// it here too, before applying the row's own values below.
 			this.frm.script_manager.trigger(this.df.fieldname + "_add", d.doctype, d.name);
-			const existing_row = existing_rows[i];
-			fieldnames.forEach((fieldname) => {
-				if (fieldname in row) {
-					d[fieldname] = row[fieldname];
-				} else if (existing_row) {
-					d[fieldname] = existing_row[fieldname];
+			apply_fields(d, row);
+		};
+
+		if (is_insert) {
+			// every uploaded row is new -- append, don't touch existing rows
+			rows.forEach(add_row);
+		} else {
+			// Update Existing Records / Insert or Update Records: match each
+			// uploaded row to an existing one by ID ("name"). A row without a
+			// match either gets appended as new (Insert or Update Records) or is
+			// silently skipped (Update Existing Records) -- both already flagged
+			// as a warning in the preview step before the user confirmed.
+			const existing_by_name = {};
+			existing_rows.forEach((row) => (existing_by_name[row.name] = row));
+			rows.forEach((row) => {
+				const existing = row.name && existing_by_name[row.name];
+				if (existing) {
+					apply_fields(existing, row);
+				} else if (!is_update) {
+					add_row(row);
 				}
 			});
-		});
+		}
 
 		this.frm.refresh_field(this.df.fieldname);
 		this.resync_form_builder();

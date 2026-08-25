@@ -35,6 +35,37 @@
 	}
 }
 
+// FileUploader only suppresses its own "Upload file" button when it owns a
+// dialog. The grid bulk-edit wizard mounts it inline in a dialog it does not
+// own, so hide the duplicate and let that dialog's footer drive the upload.
+.grid-bulk-edit-uploader .file-uploader .justify-content-end {
+	display: none;
+}
+
+// The drop zone is sized (16rem) for a modal that holds nothing else; here it
+// sits under a read-only field and a Download Template button, so trim it to
+// keep the wizard a normal modal height. One level more specific than the
+// component's own scoped `.file-upload-area[data-v-*]` rule so it wins.
+.grid-bulk-edit-uploader .file-uploader .file-upload-area {
+	min-height: 9rem;
+}
+
+// The field picker is the one part of the wizard whose height depends on the
+// child doctype -- Customize Form Field alone contributes ~29 checkbox rows,
+// which would leave the modal taller than the viewport. Cap it and scroll
+// within; the search box directly above narrows the list. Only this list
+// scrolls, so the filter row's dropdowns above it are never clipped.
+.grid-bulk-edit-screen .columns-control {
+	max-height: 15rem;
+	overflow-y: auto;
+}
+
+// The preview stacks table, row count and warnings with nothing between them.
+// :not(:empty) keeps the gap from appearing when a file parsed cleanly.
+.grid-bulk-edit-screen .preview-warnings:not(:empty) {
+	margin-top: var(--margin-md);
+}
+
 .import-tree-status-alert {
 	margin-bottom: var(--margin-sm);
 }
