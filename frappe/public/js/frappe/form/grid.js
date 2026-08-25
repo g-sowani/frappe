@@ -4,8 +4,6 @@
 import GridRow from "./grid_row";
 import GridPagination from "./grid_pagination";
 
-const BULK_EDIT_CSV_HEADER_ROWS = 7; // title, labels, fieldnames, descriptions, 2 instructions, separator
-
 // Static pixel column widths; legacy map migrates old 1-12 `columns`/`colsize`.
 export const GRID_MIN_COLUMN_WIDTH = 60;
 export const GRID_MAX_COLUMN_WIDTH = 600;
@@ -1648,110 +1646,117 @@ export default class Grid {
 	}
 
 	setup_allow_bulk_edit() {
-		let me = this;
 		if (this.frm && this.frm.get_docfield(this.df.fieldname)?.allow_bulk_edit) {
-			// download
 			this.setup_download();
-
-			const value_formatter_map = {
-				Date: (val) => (val ? frappe.datetime.user_to_str(val) : val),
-				Int: (val) => cint(val),
-				Check: (val) => cint(val),
-				Float: (val) => flt(val),
-				Currency: (val) => flt(val),
-			};
-
-			// upload
-			frappe.flags.no_socketio = true;
-			$(this.wrapper)
-				.find(".grid-upload")
-				.removeClass("hidden")
-				.on("click", () => {
-					new frappe.ui.FileUploader({
-						as_dataurl: true,
-						allow_multiple: false,
-						restrictions: {
-							allowed_file_types: [".csv"],
-						},
-						on_success(file) {
-							const data = frappe.utils.csv_to_array(
-								frappe.utils.get_decoded_string(file.dataurl)
-							);
-							if (cint(data.length) - BULK_EDIT_CSV_HEADER_ROWS > 5000) {
-								frappe.throw(__("Cannot import table with more than 5000 rows."));
-							}
-							const fieldnames = data[2];
-							me.frm.clear_table(me.df.fieldname);
-							data.forEach((row, i) => {
-								if (i < BULK_EDIT_CSV_HEADER_ROWS) return;
-								if (!row.some((v) => v)) return;
-								const d = me.frm.add_child(me.df.fieldname);
-								row.forEach((value, ci) => {
-									const fieldname = fieldnames[ci];
-									const df = frappe.meta.get_docfield(me.df.options, fieldname);
-									if (df) {
-										d[fieldname] = value_formatter_map[df.fieldtype]
-											? value_formatter_map[df.fieldtype](value)
-											: value;
-									}
-								});
-							});
-
-							me.frm.refresh_field(me.df.fieldname);
-							frappe.msgprint({
-								message: __("Table updated"),
-								title: __("Success"),
-								indicator: "green",
-							});
-						},
-					});
-					return false;
-				});
+			this.setup_upload();
 		}
 	}
 
+	// Download/upload a CSV or Excel bulk-edit template for this table, scoped to
+	// whichever columns the user picks. Both are handled by
+	// `frappe.core.doctype.data_import.grid_bulk_edit` on the server and
+	// `frappe.data_import.GridBulkEditDialog` on the client (lazy-loaded, like the
+	// rest of the Data Import tooling) so the CSV/Excel reading and writing isn't
+	// re-implemented here a second time.
 	setup_download() {
 		let title = this.df.label || frappe.model.unscrub(this.df.fieldname);
 		$(this.wrapper)
 			.find(".grid-download")
 			.removeClass("hidden")
 			.on("click", () => {
-				const data = [
-					[__("Bulk Edit {0}", [title])],
-					[],
-					[],
-					[],
-					[__("The CSV format is case sensitive")],
-					[__("Do not edit headers which are preset in the template")],
-					["------"],
-				];
-				const docfields = [];
-				frappe.get_meta(this.df.options).fields.forEach((df) => {
-					if (frappe.model.is_value_type(df.fieldtype)) {
-						data[1].push(df.label);
-						data[2].push(df.fieldname);
-						let description = (df.description || "") + " ";
-						if (df.fieldtype === "Date")
-							description += frappe.boot.sysdefaults.date_format;
-						data[3].push(description);
-						docfields.push(df);
-					}
-				});
-
-				(this.frm.doc[this.df.fieldname] || []).forEach((d) => {
-					const row = data[2].map((fieldname, i) => {
-						let value = d[fieldname];
-						if (docfields[i].fieldtype === "Date" && value) {
-							value = frappe.datetime.str_to_user(value);
-						}
-						return value || "";
+				frappe.require("data_import_tools.bundle.js", () => {
+					new frappe.data_import.GridBulkEditDialog({
+						doctype: this.frm.doctype,
+						fieldname: this.df.fieldname,
+						child_doctype: this.df.options,
+						docname: this.frm.docname,
+						title,
+						get_rows: () => this.frm.doc[this.df.fieldname] || [],
 					});
-					data.push(row);
 				});
-
-				frappe.tools.downloadify(data, null, title);
 				return false;
 			});
+	}
+
+	setup_upload() {
+		let me = this;
+		frappe.flags.no_socketio = true;
+		$(this.wrapper)
+			.find(".grid-upload")
+			.removeClass("hidden")
+			.on("click", () => {
+				new frappe.ui.FileUploader({
+					as_dataurl: true,
+					allow_multiple: false,
+					restrictions: {
+						allowed_file_types: [".csv", ".xlsx"],
+					},
+					on_success(file) {
+						frappe.require("data_import_tools.bundle.js", () => {
+							frappe.data_import
+								.upload_grid_bulk_edit_file({
+									doctype: me.frm.doctype,
+									fieldname: me.df.fieldname,
+									docname: me.frm.docname,
+									file,
+								})
+								.then((rows) => me.load_bulk_edit_rows(rows || []));
+						});
+					},
+				});
+				return false;
+			});
+	}
+
+	load_bulk_edit_rows(rows) {
+		// Rows only carry the columns that were actually in the uploaded template
+		// (see GridBulkEditImporter.parse_row). For any other field of this child
+		// doctype, keep whatever the row at that position already had instead of
+		// wiping it -- otherwise bulk-editing with only a few columns selected
+		// silently blanks out every column you didn't pick for every row.
+		const existing_rows = this.frm.doc[this.df.fieldname] || [];
+		const fieldnames = frappe.get_meta(this.df.options).fields.map((df) => df.fieldname);
+
+		this.frm.clear_table(this.df.fieldname);
+		rows.forEach((row, i) => {
+			const d = this.frm.add_child(this.df.fieldname);
+			// `frm.add_child()` (unlike the Grid's own "Add Row" button, see
+			// add_new_row()) never fires the `<fieldname>_add` script event, which
+			// some doctypes rely on to set up a new row -- e.g. Customize Form's
+			// `fields_add` stamps `is_custom_field`/`is_system_generated` on every
+			// new field, without which the field silently never gets created. Fire
+			// it here too, before the merge below overwrites it back to the old
+			// row's values for rows that aren't actually new.
+			this.frm.script_manager.trigger(this.df.fieldname + "_add", d.doctype, d.name);
+			const existing_row = existing_rows[i];
+			fieldnames.forEach((fieldname) => {
+				if (fieldname in row) {
+					d[fieldname] = row[fieldname];
+				} else if (existing_row) {
+					d[fieldname] = existing_row[fieldname];
+				}
+			});
+		});
+
+		this.frm.refresh_field(this.df.fieldname);
+		this.resync_form_builder();
+		frappe.msgprint({
+			message: __("Table updated"),
+			title: __("Success"),
+			indicator: "green",
+		});
+	}
+
+	resync_form_builder() {
+		// Customize Form (and DocType's own field editor) shows this same table a
+		// second way, through a "Form Builder" view that keeps its own separate
+		// copy of the field list. That view has no idea a bulk-edit upload just
+		// changed this grid: left alone, its next "Update" click resyncs the
+		// field list from its own stale copy and silently throws away what was
+		// just uploaded. Refetching it here keeps it in sync with the grid.
+		if (frappe.form_builder?.frm === this.frm) {
+			frappe.form_builder.store.fetch();
+		}
 	}
 
 	add_custom_button(label, click, position = "bottom") {
