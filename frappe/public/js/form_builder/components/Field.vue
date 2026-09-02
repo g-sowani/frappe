@@ -14,14 +14,14 @@ const add_field_ref = ref(null);
 // cmd/ctrl + shift + n to open the add field autocomplete
 const { ctrl_shift_n, Backspace } = useMagicKeys();
 whenever(ctrl_shift_n, (value) => {
-	if (value && selected.value && !store.is_layout_form) {
+	if (value && selected.value && store.allow_layout_edits) {
 		add_field_ref.value.open();
 	}
 });
 
 // delete/backspace to delete the field
 whenever(Backspace, (value) => {
-	if (value && selected.value && store.not_using_input && !store.is_layout_form) {
+	if (value && selected.value && store.not_using_input && store.allow_layout_edits) {
 		remove_field();
 	}
 });
@@ -229,7 +229,7 @@ onMounted(() => selected.value && label_input.value.focus_on_label());
 						<div v-html="frappe.utils.icon('funnel', 'sm')" />
 					</button>
 					<AddFieldButton
-						v-if="!store.is_layout_form"
+						v-if="store.allow_layout_edits"
 						ref="add_field_ref"
 						:column="column"
 						:field="field"
@@ -237,7 +237,7 @@ onMounted(() => selected.value && label_input.value.focus_on_label());
 						<div v-html="frappe.utils.icon('plus', 'sm')" />
 					</AddFieldButton>
 					<button
-						v-if="!store.is_layout_form"
+						v-if="store.allow_layout_edits"
 						class="btn btn-xs btn-icon"
 						:title="__('Duplicate field')"
 						@click.stop="duplicate_field"
@@ -253,7 +253,7 @@ onMounted(() => selected.value && label_input.value.focus_on_label());
 						<div v-html="frappe.utils.icon('external-link', 'sm')" />
 					</button>
 					<button
-						v-if="!store.is_layout_form"
+						v-if="store.allow_layout_edits"
 						class="btn btn-xs btn-icon"
 						:title="__('Remove field')"
 						@click.stop="remove_field"

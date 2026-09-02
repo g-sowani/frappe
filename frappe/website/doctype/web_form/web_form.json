@@ -16,8 +16,8 @@
   "is_standard",
   "section_break_1",
   "introduction_text",
-  "fields_section_break",
-  "web_form_fields",
+  "form_builder_tab",
+  "form_builder",
   "settings_tab",
   "access_control_section",
   "key_required",
@@ -52,6 +52,8 @@
   "section_break_4",
   "show_sidebar",
   "website_sidebar",
+  "fields_section_break",
+  "web_form_fields",
   "customization_tab",
   "button_label",
   "banner_image",
@@ -185,18 +187,6 @@
    "placeholder": "Describe what this form is for..."
   },
   {
-   "collapsible": 1,
-   "fieldname": "fields_section_break",
-   "fieldtype": "Section Break",
-   "label": "Fields"
-  },
-  {
-   "fieldname": "web_form_fields",
-   "fieldtype": "Table",
-   "label": "Web Form Fields",
-   "options": "Web Form Field"
-  },
-  {
    "description": "Set size in MB",
    "fieldname": "max_attachment_size",
    "fieldtype": "Int",
@@ -282,6 +272,18 @@
    "fieldname": "list_setting_message",
    "fieldtype": "HTML",
    "label": "List setting message"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "fields_section_break",
+   "fieldtype": "Section Break",
+   "label": "Fields"
+  },
+  {
+   "fieldname": "web_form_fields",
+   "fieldtype": "Table",
+   "label": "Web Form Fields",
+   "options": "Web Form Field"
   },
   {
    "fieldname": "customization_tab",
@@ -453,6 +455,16 @@
    "fieldname": "key_required",
    "fieldtype": "Check",
    "label": "Key required"
+  },
+  {
+   "fieldname": "form_builder_tab",
+   "fieldtype": "Tab Break",
+   "label": "Form"
+  },
+  {
+   "fieldname": "form_builder",
+   "fieldtype": "HTML",
+   "label": "Form Builder"
   }
  ],
  "icon": "icon-edit",

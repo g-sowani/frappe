@@ -36,10 +36,10 @@
 				/>
 			</template>
 		</draggable>
-		<div class="empty-column" :hidden="store.read_only || store.is_layout_form">
+		<div class="empty-column" :hidden="store.read_only || !store.allow_layout_edits">
 			<AddFieldButton :column="column" />
 		</div>
-		<div v-if="column.fields.length && !store.is_layout_form" class="add-new-field-btn">
+		<div v-if="column.fields.length && store.allow_layout_edits" class="add-new-field-btn">
 			<AddFieldButton :field="column.fields[column.fields.length - 1]" :column="column" />
 		</div>
 	</div>
@@ -60,7 +60,7 @@ const store = useStore();
 // delete/backspace to delete the field
 const { Backspace } = useMagicKeys();
 whenever(Backspace, (value) => {
-	if (value && selected.value && store.not_using_input && !store.is_layout_form) {
+	if (value && selected.value && store.not_using_input && store.allow_layout_edits) {
 		remove_column();
 	}
 });

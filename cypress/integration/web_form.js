@@ -35,6 +35,15 @@ context("Web Form", () => {
 			.should("have.attr", "data-theme", "green");
 	});
 
+	it("Form Builder tab", () => {
+		cy.visit("/desk/web-form/note");
+		cy.findByRole("tab", { name: "Form" }).click();
+		cy.get(".form-builder-container").should("exist");
+
+		// Fields already on the Web Form are rendered, not the whole DocType
+		cy.get(".form-builder-container").contains("Title").should("exist");
+	});
+
 	it("Open Web Form", () => {
 		cy.visit("/note");
 		cy.fill_field("title", "Note 1");

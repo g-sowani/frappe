@@ -37,7 +37,7 @@ frappe.ui.form.on("Web Form", {
 		if (frm.doc.is_standard && !frappe.boot.developer_mode) {
 			frm.disable_form();
 			frappe.show_alert(
-				__("Standard Web Forms can not be modified, duplicate the Web Form instead.")
+				__("Standard Web Forms can not be modified, duplicate the Web Form instead."),
 			);
 		}
 		on_controlled_access_change(frm);
@@ -47,6 +47,7 @@ frappe.ui.form.on("Web Form", {
 		frm.trigger("add_publish_button");
 		frm.trigger("render_condition_table");
 		frm.trigger("render_dynamic_filters_table");
+		render_form_builder(frm);
 	},
 
 	login_required: on_controlled_access_change,
@@ -59,7 +60,23 @@ frappe.ui.form.on("Web Form", {
 		}
 	},
 
+	on_tab_change: (frm) => {
+		let current_tab = frm.get_active_tab().label;
+
+		if (current_tab === "Form") {
+			frm.footer.wrapper.hide();
+			frm.form_wrapper.find(".form-message").hide();
+			frm.form_wrapper.addClass("mb-1");
+		} else {
+			frm.footer.wrapper.show();
+			frm.form_wrapper.find(".form-message").show();
+			frm.form_wrapper.removeClass("mb-1");
+		}
+	},
+
 	validate: function (frm) {
+		flush_form_builder(frm);
+
 		// allow_delete is hidden (depends_on allow_multiple) and would otherwise
 		// retain a stale value while server-side checks read it directly.
 		!frm.doc.allow_multiple && frm.set_value("allow_delete", 0);
@@ -71,7 +88,7 @@ frappe.ui.form.on("Web Form", {
 		}
 
 		let page_break_count = frm.doc.web_form_fields.filter(
-			(f) => f.fieldtype == "Page Break"
+			(f) => f.fieldtype == "Page Break",
 		).length;
 
 		if (page_break_count >= 10) {
@@ -125,6 +142,7 @@ frappe.ui.form.on("Web Form", {
 				}
 				frm.refresh_field("web_form_fields");
 				frm.scroll_to_field("web_form_fields");
+				frappe.web_form_builder?.store?.fetch();
 			});
 		});
 	},
@@ -140,7 +158,7 @@ frappe.ui.form.on("Web Form", {
 			frm.fields_dict.web_form_fields.grid.update_docfield_property(
 				"fieldname",
 				"options",
-				fields.map(as_select_option)
+				fields.map(as_select_option),
 			);
 			frm.fields_dict.list_columns.grid.update_docfield_property(
 				"fieldname",
@@ -149,9 +167,9 @@ frappe.ui.form.on("Web Form", {
 					.filter(
 						(df) =>
 							!frappe.model.no_value_type.includes(df.fieldtype) &&
-							df.is_virtual !== 1
+							df.is_virtual !== 1,
 					)
-					.map(as_select_option)
+					.map(as_select_option),
 			);
 		};
 
@@ -193,10 +211,15 @@ frappe.ui.form.on("Web Form", {
 
 	doc_type: function (frm) {
 		frm.trigger("set_fields");
+		render_form_builder(frm);
 	},
 
 	allow_multiple: function (frm) {
 		frm.doc.allow_multiple && frm.set_value("show_list", 1);
+	},
+
+	after_save: function (frm) {
+		frappe.web_form_builder?.store?.fetch();
 	},
 
 	before_save: function (frm) {
@@ -204,7 +227,7 @@ frappe.ui.form.on("Web Form", {
 		let static_filters = JSON.parse(frm.doc.condition_json || "[]");
 		static_filters = frappe.dashboard_utils.remove_common_static_filter_values(
 			static_filters,
-			dynamic_filters
+			dynamic_filters,
 		);
 		frm.set_value("condition_json", JSON.stringify(static_filters));
 		frm.trigger("render_condition_table");
@@ -339,7 +362,7 @@ frappe.ui.form.on("Web Form", {
 		let fields = frappe.dashboard_utils.get_fields_for_dynamic_filter_dialog(
 			true,
 			filters,
-			frm.dynamic_filters
+			frm.dynamic_filters,
 		);
 
 		// Override description to show Python expressions (evaluated server-side)
@@ -431,7 +454,7 @@ frappe.ui.form.on("Web Form Field", {
 
 		if (doc.fieldtype == "Page Break") {
 			let page_break_count = frm.doc.web_form_fields.filter(
-				(f) => f.fieldtype == "Page Break"
+				(f) => f.fieldtype == "Page Break",
 			).length;
 			page_break_count >= 10 &&
 				frappe.throw(__("There can be only 9 Page Break fields in a Web Form"));
@@ -479,6 +502,112 @@ function get_fields_for_doctype(doctype) {
 	});
 }
 
+function keep_form_tab_visible(frm) {
+	const tab = frm.layout?.tabs?.find((t) => t.df.fieldname === "form_builder_tab");
+	if (!tab || tab._forced_visible) return;
+
+	const original_refresh = tab.refresh.bind(tab);
+	tab.refresh = function () {
+		original_refresh();
+		this.toggle(true);
+	};
+	tab._forced_visible = true;
+	tab.toggle(true);
+}
+
+function render_form_builder(frm) {
+	const field = frm.fields_dict["form_builder"];
+	if (!field) return;
+
+	keep_form_tab_visible(frm);
+	const wrapper = $(field.wrapper);
+
+	if (!frm.doc.doc_type) return show_form_builder_placeholder(frm, wrapper);
+
+	const builder = frappe.web_form_builder;
+	if (!builder) return mount_form_builder(frm, wrapper);
+	if (!builder.store || builder.frm !== frm) return repoint_form_builder(builder, frm, wrapper);
+
+	sync_form_builder(builder, frm);
+}
+
+function show_form_builder_placeholder(frm, wrapper) {
+	if (frappe.web_form_builder?.frm === frm) return;
+
+	wrapper.html(
+		`<div class="form-message blue">${__(
+			"Select a DocType in the Details tab to start building this form.",
+		)}</div>`,
+	);
+}
+
+// FormBuilder stores these under the same names it accepts them by, so one
+// object serves both a fresh mount and a re-point of the existing instance.
+function builder_options(frm) {
+	return {
+		doctype: frm.doc.doc_type,
+		customize: false,
+		is_layout: true,
+		row_doctype: "Web Form Field",
+		target_fieldname: "web_form_fields",
+		force_read_only: is_read_only(frm),
+		editable_props: ["label"],
+	};
+}
+
+function mount_form_builder(frm, wrapper) {
+	if (frm._web_form_builder_loading) return;
+	frm._web_form_builder_loading = true;
+
+	frappe.require("form_builder.bundle.js").then(() => {
+		frappe.web_form_builder = new frappe.ui.FormBuilder({
+			wrapper,
+			frm,
+			...builder_options(frm),
+		});
+		frappe.web_form_builder.docname = frm.doc.name;
+		frm._web_form_builder_loading = false;
+	});
+}
+
+// Standard Web Forms are already frm.disable_form()'d; keep the builder in step.
+function is_read_only(frm) {
+	return Boolean(frm.doc.is_standard && !frappe.boot.developer_mode);
+}
+
+// Write the builder's layout back into web_form_fields before the form's own
+// validations read it - validate() runs ahead of before_save(). The grid edits
+// the same table, so only overwrite it when the builder itself was touched.
+function flush_form_builder(frm) {
+	let builder = frappe.web_form_builder;
+	if (!builder?.store || builder.frm !== frm || !builder.store.dirty) return;
+
+	let fields = builder.store.update_fields();
+	if (typeof fields === "string") frappe.throw(fields);
+}
+
+function repoint_form_builder(builder, frm, wrapper) {
+	Object.assign(builder, builder_options(frm), {
+		$wrapper: wrapper,
+		frm,
+		page: frm.page,
+		docname: frm.doc.name,
+	});
+	builder.init(true);
+	builder.store.fetch();
+}
+
+function sync_form_builder(builder, frm) {
+	builder.force_read_only = is_read_only(frm);
+	if (builder.docname === frm.doc.name && builder.doctype === frm.doc.doc_type) return;
+
+	builder.docname = frm.doc.name;
+	builder.doctype = frm.doc.doc_type;
+	builder.update_store();
+	builder.setup_page_actions();
+	builder.store.fetch();
+}
+
 function on_controlled_access_change(frm) {
 	const has_controlled_access = frm.doc.login_required || frm.doc.key_required;
 	if (!has_controlled_access) {
@@ -491,7 +620,6 @@ function on_controlled_access_change(frm) {
 }
 
 function render_list_settings_message(frm) {
-	// render list setting message
 	if (
 		frm.fields_dict["list_setting_message"] &&
 		!frm.doc.login_required &&
@@ -508,7 +636,7 @@ function render_list_settings_message(frm) {
 		`;
 		let message = __(
 			"Login or a request key is required to see web form list view. Enable {0} to see list settings",
-			[go_to_access_fields]
+			[go_to_access_fields],
 		);
 		$(frm.fields_dict["list_setting_message"].wrapper)
 			.html($(`<div class="form-message blue">${message}</div>`))

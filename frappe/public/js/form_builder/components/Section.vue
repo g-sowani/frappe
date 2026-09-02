@@ -35,7 +35,7 @@
 					></div>
 				</div>
 				<Dropdown
-					v-if="!store.read_only && !store.is_layout_form"
+					v-if="!store.read_only && store.allow_layout_edits"
 					:options="options"
 					@click.stop
 				/>
@@ -94,7 +94,7 @@ const store = useStore();
 // delete/backspace to delete the field
 const { Backspace } = useMagicKeys();
 whenever(Backspace, (value) => {
-	if (value && selected.value && store.not_using_input && !store.is_layout_form) {
+	if (value && selected.value && store.not_using_input && store.allow_layout_edits) {
 		remove_section();
 	}
 });

@@ -5,13 +5,27 @@ import FormBuilderComponent from "./FormBuilder.vue";
 import { registerGlobalComponents } from "./globals.js";
 
 class FormBuilder {
-	constructor({ wrapper, frm, doctype, customize, is_layout }) {
+	constructor({
+		wrapper,
+		frm,
+		doctype,
+		customize,
+		is_layout,
+		row_doctype,
+		target_fieldname,
+		force_read_only,
+		editable_props,
+	}) {
 		this.$wrapper = $(wrapper);
 		this.frm = frm;
 		this.page = frm.page;
 		this.doctype = doctype;
 		this.customize = customize;
 		this.is_layout = is_layout || false;
+		this.row_doctype = row_doctype || "";
+		this.target_fieldname = target_fieldname || "fields";
+		this.force_read_only = force_read_only || false;
+		this.editable_props = editable_props || null;
 		this.read_only = false;
 
 		this.init();
@@ -71,6 +85,10 @@ class FormBuilder {
 		this.store.doctype = this.doctype;
 		this.store.is_customize_form = this.customize;
 		this.store.is_layout_form = this.is_layout;
+		this.store.row_doctype = this.row_doctype;
+		this.store.target_fieldname = this.target_fieldname;
+		this.store.force_read_only = this.force_read_only;
+		this.store.editable_props = this.editable_props;
 		this.store.page = this.page;
 		this.store.frm = this.frm;
 	}

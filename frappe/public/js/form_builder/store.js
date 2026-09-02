@@ -23,6 +23,10 @@ export const useStore = defineStore("form-builder-store", () => {
 	let read_only = ref(false);
 	let is_customize_form = ref(false);
 	let is_layout_form = ref(false);
+	let force_read_only = ref(false);
+	let row_doctype = ref("");
+	let target_fieldname = ref("fields");
+	let editable_props = ref(null);
 	let source_doctype_fields = ref([]);
 	let preview = ref(false);
 	let drag = ref(false);
@@ -52,6 +56,65 @@ export const useStore = defineStore("form-builder-store", () => {
 		return is_customize_form.value ? custom_docfields.value : docfields.value;
 	});
 
+	let docfield_doctype = computed(() => {
+		if (is_customize_form.value) return "Customize Form Field";
+		return row_doctype.value || "DocField";
+	});
+
+	// A reference mode can persist exactly the properties its row doctype stores.
+	let override_props = computed(() => {
+		if (!row_doctype.value) return LAYOUT_OVERRIDE_PROPS;
+		return get_docfields.value
+			.filter((df) => !frappe.model.no_value_type.includes(df.fieldtype))
+			.map((df) => df.fieldname);
+	});
+
+	// DocType Layout may only rearrange what already exists; Web Form and the
+	// plain DocType builder may add and remove fields too.
+	let allow_layout_edits = computed(() => !is_layout_form.value || !!row_doctype.value);
+
+	// Tabs serialise as a Tab Break row, so a reference mode can only offer them
+	// if its row doctype lists that fieldtype. Web Form Field does not.
+	let allow_tabs = computed(() => {
+		if (!allow_layout_edits.value) return false;
+		if (!row_doctype.value) return true;
+
+		let fieldtypes = frappe.meta.get_docfield(row_doctype.value, "fieldtype");
+		return (fieldtypes?.options || "").split("\n").includes("Tab Break");
+	});
+
+	// Fieldnames currently on the canvas, so the picker can skip them.
+	let placed_fieldnames = computed(() => {
+		let names = new Set();
+		for (let tab of form.value.layout.tabs || []) {
+			for (let section of tab.sections) {
+				for (let column of section.columns) {
+					column.fields.forEach((f) => names.add(f.df.fieldname));
+				}
+			}
+		}
+		return names;
+	});
+
+	// Reference modes pick from the source DocType's fields; everything else
+	// creates a brand new field, so it picks a fieldtype instead.
+	let add_field_options = computed(() => {
+		if (!row_doctype.value) {
+			return frappe.model.all_fieldtypes
+				.filter((df) => !in_list(frappe.model.layout_fields, df))
+				.map((df) => ({ label: __(df), value: df }));
+		}
+
+		return source_doctype_fields.value
+			.filter(
+				(df) =>
+					df.fieldname &&
+					!placed_fieldnames.value.has(df.fieldname) &&
+					!in_list(frappe.model.layout_fields, df.fieldtype),
+			)
+			.map((df) => ({ label: __(df.label || df.fieldname), value: df.fieldname }));
+	});
+
 	let current_tab = computed(() => {
 		return form.value.layout.tabs.find((tab) => tab.df.name == form.value.active_tab);
 	});
@@ -62,7 +125,7 @@ export const useStore = defineStore("form-builder-store", () => {
 			active_element.value?.readOnly ||
 			active_element.value?.disabled ||
 			(active_element.value?.tagName !== "INPUT" &&
-				active_element.value?.tagName !== "TEXTAREA")
+				active_element.value?.tagName !== "TEXTAREA"),
 	);
 
 	// Actions
@@ -71,14 +134,41 @@ export const useStore = defineStore("form-builder-store", () => {
 	}
 
 	function get_df(fieldtype, fieldname = "", label = "") {
-		let docfield = is_customize_form.value ? "Customize Form Field" : "DocField";
-		let df = frappe.model.get_new_doc(docfield);
+		let df = frappe.model.get_new_doc(docfield_doctype.value);
 		df.name = frappe.utils.get_random(8);
 		df.fieldtype = fieldtype;
 		df.fieldname = fieldname;
 		df.label = label;
 		is_customize_form.value && (df.is_custom_field = 1);
 		return df;
+	}
+
+	// A picked option is a source fieldname in reference mode, a fieldtype otherwise.
+	function new_field_df(value) {
+		let sf = row_doctype.value
+			? source_doctype_fields.value.find((f) => f.fieldname === value)
+			: null;
+		if (!sf) return get_df(value);
+
+		let df = get_df(sf.fieldtype, sf.fieldname, sf.label);
+		for (let prop of override_props.value) {
+			if (sf[prop] !== undefined && sf[prop] !== null && sf[prop] !== "") {
+				df[prop] = sf[prop];
+			}
+		}
+		return with_fallback_label(df);
+	}
+
+	// Show real, editable text instead of a "No Label" placeholder.
+	function with_fallback_label(df) {
+		if (!df.label && df.fieldname && df.fieldtype !== "Column Break") {
+			df.label = frappe.unscrub(df.fieldname);
+		}
+		return df;
+	}
+
+	function is_prop_editable(fieldname) {
+		return !editable_props.value || editable_props.value.includes(fieldname);
 	}
 
 	function has_standard_field(field) {
@@ -104,12 +194,12 @@ export const useStore = defineStore("form-builder-store", () => {
 	}
 
 	async function fetch_for_layout() {
-		// Populate DocField meta for the properties panel
+		// Populate the row doctype's meta for the properties panel
 		if (!docfields.value.length) {
-			if (!frappe.get_meta("DocField")) {
-				await load_doctype_model("DocField");
+			if (!frappe.get_meta(docfield_doctype.value)) {
+				await load_doctype_model(docfield_doctype.value);
 			}
-			docfields.value = frappe.get_meta("DocField").fields;
+			docfields.value = frappe.get_meta(docfield_doctype.value).fields;
 		}
 
 		// Load source DocType meta
@@ -120,17 +210,20 @@ export const useStore = defineStore("form-builder-store", () => {
 		source_doctype_fields.value = frappe.get_meta(source_dt).fields;
 
 		// Build merged field list: layout row order + overrides merged onto source field defs
-		let layout_rows = frm.value.doc.fields || [];
+		let layout_rows = frm.value.doc[target_fieldname.value] || [];
 		let merged_fields;
 		if (layout_rows.length > 0) {
 			merged_fields = layout_rows
 				.map((row) => {
 					let sf = source_doctype_fields.value.find(
-						(f) => f.fieldname === row.fieldname
+						(f) => f.fieldname === row.fieldname,
 					);
-					if (!sf) return null;
+					// Web Form rows carry their own definition, so breaks and HTML
+					// need not exist on the source doctype - keep them as-is
+					// instead of dropping them on the next save.
+					if (!sf) return row_doctype.value ? { ...row } : null;
 					let copy = JSON.parse(JSON.stringify(sf));
-					for (let prop of LAYOUT_OVERRIDE_PROPS) {
+					for (let prop of override_props.value) {
 						let val = row[prop];
 						if (val !== undefined && val !== null && val !== "") {
 							copy[prop] = val;
@@ -139,20 +232,35 @@ export const useStore = defineStore("form-builder-store", () => {
 					return copy;
 				})
 				.filter(Boolean);
+		} else if (row_doctype.value) {
+			merged_fields = [];
 		} else {
 			merged_fields = JSON.parse(JSON.stringify(source_doctype_fields.value));
+		}
+
+		if (row_doctype.value) {
+			merged_fields = merged_fields.map(with_fallback_label);
 		}
 
 		// Preserve active tab index
 		let previous_active_tab_index = null;
 		if (form.value.layout?.tabs && form.value.active_tab) {
 			previous_active_tab_index = form.value.layout.tabs.findIndex(
-				(tab) => tab.df.name === form.value.active_tab
+				(tab) => tab.df.name === form.value.active_tab,
 			);
 		}
 
 		doc.value = { fields: merged_fields, custom: 1, istable: 0 };
 		form.value.layout = get_layout();
+
+		if (!form.value.layout.tabs.length) {
+			form.value.layout.tabs = [
+				{
+					df: get_df("Tab Break", "", __("Details")),
+					sections: [section_boilerplate()],
+				},
+			];
+		}
 
 		if (
 			previous_active_tab_index !== null &&
@@ -177,7 +285,7 @@ export const useStore = defineStore("form-builder-store", () => {
 				frm.value.doc.__unsaved = 0;
 				frm.value.page.clear_indicator();
 			}
-			read_only.value = false;
+			read_only.value = force_read_only.value;
 			preview.value = false;
 		});
 
@@ -200,7 +308,7 @@ export const useStore = defineStore("form-builder-store", () => {
 		}
 
 		if (!get_docfields.value.length) {
-			let docfield = is_customize_form.value ? "Customize Form Field" : "DocField";
+			let docfield = docfield_doctype.value;
 			if (!frappe.get_meta(docfield)) {
 				await load_doctype_model(docfield);
 			}
@@ -217,7 +325,7 @@ export const useStore = defineStore("form-builder-store", () => {
 		let previous_active_tab_index = null;
 		if (form.value.layout?.tabs && form.value.active_tab) {
 			previous_active_tab_index = form.value.layout.tabs.findIndex(
-				(tab) => tab.df.name === form.value.active_tab
+				(tab) => tab.df.name === form.value.active_tab,
 			);
 		}
 
@@ -307,7 +415,7 @@ export const useStore = defineStore("form-builder-store", () => {
 			if (["Link", ...frappe.model.table_fields].includes(df.fieldtype) && !df.options) {
 				error_message = __(
 					"Options is required for field {0} of type {1}",
-					get_field_data(df)
+					get_field_data(df),
 				);
 			}
 
@@ -315,7 +423,7 @@ export const useStore = defineStore("form-builder-store", () => {
 			if (df.hidden && df.reqd && !df.default) {
 				error_message = __(
 					"{0} cannot be hidden and mandatory without any default value",
-					get_field_data(df)
+					get_field_data(df),
 				);
 			}
 
@@ -323,7 +431,7 @@ export const useStore = defineStore("form-builder-store", () => {
 			if (df.in_list_view && not_allowed_in_list_view.includes(df.fieldtype)) {
 				error_message = __(
 					"'In List View' is not allowed for field {0} of type {1}",
-					get_field_data(df)
+					get_field_data(df),
 				);
 			}
 
@@ -331,7 +439,7 @@ export const useStore = defineStore("form-builder-store", () => {
 			if (df.in_global_search && frappe.model.no_value_type.includes(df.fieldtype)) {
 				error_message = __(
 					"'In Global Search' is not allowed for field {0} of type {1}",
-					get_field_data(df)
+					get_field_data(df),
 				);
 			}
 
@@ -346,7 +454,7 @@ export const useStore = defineStore("form-builder-store", () => {
 				} catch (e) {
 					error_message = __(
 						"Invalid Filter Format for field {0} of type {1}. Try using filter icon on the field to set it correctly",
-						get_field_data(df)
+						get_field_data(df),
 					);
 				}
 			}
@@ -365,16 +473,16 @@ export const useStore = defineStore("form-builder-store", () => {
 			// Convert to DocType Layout Field rows (fieldname + overrideable props only)
 			let layout_rows = form_builder_fields
 				.map((field) => {
-					if (!field.fieldname) return null;
+					if (!field.fieldname && !row_doctype.value) return null;
 					let row = { fieldname: field.fieldname };
-					for (let prop of LAYOUT_OVERRIDE_PROPS) {
+					for (let prop of override_props.value) {
 						row[prop] = field[prop] !== undefined ? field[prop] : null;
 					}
 					return row;
 				})
 				.filter(Boolean);
 
-			frm.value.set_value("fields", layout_rows);
+			frm.value.set_value(target_fieldname.value, layout_rows);
 			return layout_rows;
 		} catch (e) {
 			console.error(e);
@@ -396,7 +504,7 @@ export const useStore = defineStore("form-builder-store", () => {
 			let fields = get_updated_fields();
 			let has_error = validate_fields(fields, doc.value.istable);
 			if (has_error) return has_error;
-			frm.value.set_value("fields", fields);
+			frm.value.set_value(target_fieldname.value, fields);
 			return fields;
 		} catch (e) {
 			console.error(e);
@@ -526,6 +634,17 @@ export const useStore = defineStore("form-builder-store", () => {
 		read_only,
 		is_customize_form,
 		is_layout_form,
+		row_doctype,
+		force_read_only,
+		target_fieldname,
+		editable_props,
+		allow_layout_edits,
+		allow_tabs,
+		add_field_options,
+		new_field_df,
+		is_prop_editable,
+		docfield_doctype,
+		override_props,
 		source_doctype_fields,
 		preview,
 		drag,

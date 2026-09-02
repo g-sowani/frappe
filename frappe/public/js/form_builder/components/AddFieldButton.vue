@@ -16,7 +16,11 @@
 						:value="autocomplete_value"
 						:options="fields"
 						@change="add_new_field"
-						:placeholder="__('Search fieldtypes...')"
+						:placeholder="
+						store.row_doctype
+							? __('Search fields...')
+							: __('Search fieldtypes...')
+					"
 					/>
 				</div>
 			</div>
@@ -58,20 +62,7 @@ const selected = computed(() => {
 
 const show = ref(false);
 const autocomplete_value = ref("");
-const fields = computed(() => {
-	let fields = frappe.model.all_fieldtypes
-		.filter((df) => {
-			if (in_list(frappe.model.layout_fields, df)) {
-				return false;
-			}
-			return true;
-		})
-		.map((df) => {
-			let out = { label: __(df), value: df };
-			return out;
-		});
-	return [...fields];
-});
+const fields = computed(() => store.add_field_options);
 
 const add_field_btn_ref = ref(null);
 const autocomplete_ref = ref(null);
@@ -109,7 +100,7 @@ function add_new_field(field) {
 	if (!fieldtype) return;
 
 	let new_field = {
-		df: store.get_df(fieldtype),
+		df: store.new_field_df(fieldtype),
 		table_columns: [],
 	};
 

@@ -43,7 +43,9 @@ function resize(e) {
 			<div
 				class="actions"
 				v-if="
-					store.form.layout.tabs.length == 1 && !store.read_only && !store.is_layout_form
+					store.form.layout.tabs.length == 1 &&
+					!store.read_only &&
+					store.allow_tabs
 				"
 			>
 				<button
