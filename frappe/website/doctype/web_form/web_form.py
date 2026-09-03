@@ -568,6 +568,9 @@ def get_context(context):
 			if field.fieldtype == "Link":
 				process_link_field(field, self.name, web_form_request_key, docname)
 
+			if field.fieldtype == "Table MultiSelect":
+				process_table_multiselect_field(field, self.name, web_form_request_key, docname)
+
 		context.reference_doc = {}
 		if web_form_request and frappe.form_dict.is_new:
 			context.reference_doc.update(web_form_request.get_web_form_values())
@@ -808,6 +811,17 @@ def process_link_field(field, web_form_name, web_form_request_key=None, docname=
 		web_form_request_key=web_form_request_key,
 		docname=docname,
 	)
+	return field
+
+
+def process_table_multiselect_field(field, web_form_name, web_form_request_key=None, docname=None):
+	"""Resolve a Table MultiSelect field so the portal can render it without the child meta.
+
+	`ControlTableMultiSelect.get_link_field()` calls `frappe.get_meta(field.options)` and
+	raises if it comes back empty. Portal pages never ship child doctype metas, so the
+	control throws during `FieldGroup.make()` and blanks the whole form.
+	"""
+	# TODO(human)
 	return field
 
 
@@ -1143,6 +1157,9 @@ def get_form_data(
 
 		if field.fieldtype == "Link":
 			process_link_field(field, web_form_name, web_form_request_key, docname)
+
+		if field.fieldtype == "Table MultiSelect":
+			process_table_multiselect_field(field, web_form_name, web_form_request_key, docname)
 
 	return out
 

@@ -260,6 +260,18 @@ $min-h-steps: 24, 32, 40, 48, 64, 80, 96;
 	}
 }
 
+/* fixed-height steps (Tailwind's h-*), mirroring the min-h-* scale — for panes
+   that must keep a constant height so surrounding layout stays put, usually
+   paired with .overflow-y-auto. Bootstrap only ships h-25/50/75/100/auto, so
+   these numeric steps do not collide. */
+$h-steps: 24, 32, 40, 48, 64, 80, 96;
+
+@each $n in $h-steps {
+	.h-#{$n} {
+		height: spacing-step($n);
+	}
+}
+
 .truncate {
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -272,6 +284,10 @@ $min-h-steps: 24, 32, 40, 48, 64, 80, 96;
 
 .overflow-x-auto {
 	overflow-x: auto;
+}
+
+.overflow-y-auto {
+	overflow-y: auto;
 }
 
 .whitespace-nowrap {
