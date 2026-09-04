@@ -15,6 +15,7 @@ class FormBuilder {
 		target_fieldname,
 		force_read_only,
 		editable_props,
+		show_preview,
 	}) {
 		this.$wrapper = $(wrapper);
 		this.frm = frm;
@@ -26,6 +27,7 @@ class FormBuilder {
 		this.target_fieldname = target_fieldname || "fields";
 		this.force_read_only = force_read_only || false;
 		this.editable_props = editable_props || null;
+		this.show_preview = show_preview ?? true;
 		this.read_only = false;
 
 		this.init();
@@ -45,6 +47,8 @@ class FormBuilder {
 
 	setup_page_actions() {
 		this.preview_btn?.remove();
+		if (!this.show_preview) return;
+
 		this.preview_btn = this.page.add_button(__("Show Preview"), () => {
 			this.store.frm.layout.tabs.find((tab) => tab.label === "Form").set_active();
 			this.store.preview = !this.store.preview;

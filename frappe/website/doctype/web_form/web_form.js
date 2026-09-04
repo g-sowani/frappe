@@ -804,6 +804,7 @@ function builder_options(frm) {
 		target_fieldname: "web_form_fields",
 		force_read_only: is_read_only(frm),
 		editable_props: ["label"],
+		show_preview: false,
 	};
 }
 
