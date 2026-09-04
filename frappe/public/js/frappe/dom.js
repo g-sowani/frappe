@@ -149,7 +149,9 @@ frappe.dom = {
 						return false;
 					}
 				})
-				.appendTo("#body");
+				// #body only exists inside the Desk shell (frappe/www/desk.html);
+				// website/web-form pages have no such element, so fall back to <body>.
+				.appendTo($("#body").length ? "#body" : "body");
 
 			freeze.html(
 				repl(

@@ -564,6 +564,9 @@ def get_context(context):
 				field.fields = get_in_list_view_fields(
 					field.options, self.name, web_form_request_key, docname
 				)
+				field.edit_fields = get_full_table_fields(
+					field.options, self.name, web_form_request_key, docname
+				)
 
 			if field.fieldtype == "Link":
 				process_link_field(field, self.name, web_form_request_key, docname)
@@ -821,7 +824,33 @@ def process_table_multiselect_field(field, web_form_name, web_form_request_key=N
 	raises if it comes back empty. Portal pages never ship child doctype metas, so the
 	control throws during `FieldGroup.make()` and blanks the whole form.
 	"""
-	# TODO(human)
+	meta = frappe.get_meta(field.options)
+	link_field = next((df for df in meta.fields if df.fieldtype == "Link"), None)
+
+	if link_field:
+		# Hand the client a plain dict of the resolved Link field so
+		# ControlTableMultiSelect.get_link_field() can use `this.df.link_field` instead of
+		# `frappe.get_meta()`, which is always empty on portal pages (see docstring above).
+		#
+		# ControlTableMultiSelect (a ControlLink subclass) otherwise searches for suggestions
+		# via a live `frappe.desk.search.search_link` call - a Desk-only, login-required
+		# endpoint, so it would come back empty (or error out entirely for Guest) on a portal
+		# page. Route it through the same fix already used for ordinary Link fields: resolve a
+		# static, permission-checked snapshot of options up front and turn the field into an
+		# "Autocomplete" the client can search locally, no further server round-trip involved.
+		link_field = link_field.as_dict()
+		process_link_field(link_field, web_form_name, web_form_request_key, docname)
+		field.link_field = link_field
+		# The value the user picks is necessarily one from that pre-vetted snapshot, so the
+		# extra `frappe.client.validate_link_and_fetch` round-trip ControlLink normally does on
+		# commit would be redundant here - and it's the same Desk-only endpoint problem again.
+		# The real DocType-level Link validation still runs when the document is saved either way.
+		field.ignore_link_validation = 1
+	# else: leave `field` untouched. The child doctype has no Link field, which is a data
+	# problem with the Web Form's own configuration, not something the portal can fix at
+	# render time — the client's get_link_field() will throw the same "Table with atleast
+	# one Link field" error it always has, rather than fail silently here.
+
 	return field
 
 
@@ -1153,6 +1182,9 @@ def get_form_data(
 			field.fields = get_in_list_view_fields(
 				field.options, web_form_name, web_form_request_key, docname
 			)
+			field.edit_fields = get_full_table_fields(
+				field.options, web_form_name, web_form_request_key, docname
+			)
 			out.update({field.fieldname: field.fields})
 
 		if field.fieldtype == "Link":
@@ -1205,6 +1237,27 @@ def get_in_list_view_fields(doctype, web_form_name=None, web_form_request_key=No
 	return [get_field_df(f) for f in fields]
 
 
+def get_full_table_fields(doctype, web_form_name=None, web_form_request_key=None, docname=None):
+	"""Full field list for a Table field's row editor.
+
+	get_in_list_view_fields() above is deliberately a *summary*: just enough
+	columns for the collapsed grid, plus a synthetic "name" column standing in
+	for a title when the child doctype has none. The expanded row editor
+	needs the doctype's real fields instead — the same ones Desk's grid shows,
+	via frappe.meta.get_docfields() — but the browser can't call that here
+	since Web Forms never ship full child-doctype meta to a guest.
+	"""
+	meta = frappe.get_meta(doctype)
+
+	def get_field_df(df):
+		out = df.as_dict()
+		if out.get("options") and out.get("fieldtype") == "Link":
+			process_link_field(out, web_form_name, web_form_request_key, docname)
+		return out
+
+	return [get_field_df(df) for df in meta.fields if not df.hidden]
+
+
 def is_guest_key_web_form(web_form):
 	return cint(web_form.key_required) and not cint(web_form.login_required)
 
@@ -1224,7 +1277,7 @@ def has_link_option(fields, doctype):
 	for f in fields:
 		if f.options == doctype:
 			return True
-		if f.fieldtype == "Table" and f.options:
+		if f.fieldtype in ("Table", "Table MultiSelect") and f.options:
 			child_doctype = f.options
 			if not isinstance(child_doctype, str) or not child_doctype.strip():
 				continue

@@ -15,6 +15,15 @@ frappe.ui.form.ControlTableMultiSelect = class ControlTableMultiSelect extends (
 		this.$input_area.addClass("form-control table-multiselect");
 		this.$input.removeClass("form-control");
 
+		if (this.get_static_options()) {
+			// ControlLink debounces its input handler by 500ms because each keystroke would
+			// otherwise fire a search request. Filtering an in-memory list costs nothing, so
+			// that delay is pure lag here. The debounced handler itself stays defined -
+			// validate_link_and_fetch() still calls .cancel() on it.
+			this.$input.off("input", this._debounced_input_handler);
+			this.$input.on("input", (e) => this.on_input(e));
+		}
+
 		this.$input.on("awesomplete-selectcomplete", () => {
 			this.$input.val("").focus();
 		});
@@ -98,6 +107,12 @@ frappe.ui.form.ControlTableMultiSelect = class ControlTableMultiSelect extends (
 
 		const link_fieldname = this.get_link_field().fieldname;
 		this._rows_list = rows.map((row) => row[link_fieldname]);
+
+		// custom_awesomplete_filter() below hides whatever is already picked, and Awesomplete
+		// only re-runs that filter when its list is assigned - which ControlLink does once per
+		// search round-trip. So every add and remove leaves the dropdown's contents stale
+		// until the next one. With the options already in memory there's nothing to wait for.
+		this.refresh_static_options();
 
 		return rows;
 	}
@@ -214,13 +229,52 @@ frappe.ui.form.ControlTableMultiSelect = class ControlTableMultiSelect extends (
 	}
 	get_link_field() {
 		if (!this._link_field) {
+			// Web Form ships the link field pre-resolved on the docfield itself
+			// (frappe.website.doctype.web_form.web_form.process_table_multiselect_field),
+			// since portal pages never sync child-doctype meta the way Desk does.
 			const meta = frappe.get_meta(this.df.options);
-			this._link_field = meta?.fields?.find((df) => df.fieldtype === "Link");
+			this._link_field =
+				this.df.link_field || meta?.fields?.find((df) => df.fieldtype === "Link");
 			if (!this._link_field) {
 				throw new Error("Table MultiSelect requires a Table with atleast one Link field");
 			}
 		}
 		return this._link_field;
+	}
+	get_static_options() {
+		const link_field = this.get_link_field();
+
+		// Only a Web Form pre-resolves the link field into an "Autocomplete" carrying a static,
+		// permission-checked options snapshot (see
+		// frappe.website.doctype.web_form.web_form.process_table_multiselect_field). Anywhere
+		// else this is a real Link field and ControlLink's live search stays in charge.
+		if (link_field.fieldtype !== "Autocomplete") return null;
+
+		if (!this._static_options) {
+			this._static_options = frappe.ui.form.ControlAutocomplete.prototype.parse_options.call(
+				this,
+				link_field.options
+			);
+		}
+		return this._static_options;
+	}
+	refresh_static_options() {
+		const options = this.get_static_options();
+		if (!options || !this.awesomplete) return false;
+
+		const term = cstr(this.$input && this.$input.val()).toLowerCase();
+		// Assigning `list` makes Awesomplete re-evaluate, but only while the input has focus -
+		// so this refreshes a dropdown the user is actually looking at and stays silent
+		// (just restocking the list) the rest of the time.
+		this.awesomplete.list = term
+			? options.filter((o) => cstr(o.label || o.value).toLowerCase().includes(term))
+			: options;
+		return true;
+	}
+	on_input(e) {
+		// On Desk this falls through to a live frappe.desk.search.search_link call - a
+		// login-required endpoint that 403s for Guest, which is why the portal gets a snapshot.
+		if (!this.refresh_static_options()) super.on_input(e);
 	}
 	custom_awesomplete_filter(awesomplete) {
 		let me = this;

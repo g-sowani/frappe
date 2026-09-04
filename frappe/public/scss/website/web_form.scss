@@ -549,3 +549,66 @@
 		}
 	}
 }
+
+// Child table row editor: it already floats as a centered panel on Web Form
+// pages (common/controls.scss imports common/grid.scss, which the website
+// bundle picks up site-wide), but the dark backdrop it should float over
+// (#freeze) only gets its z-index/opacity/background from desk/global.scss,
+// which is Desk-only. Add just that missing piece here, scoped to Web Form
+// pages with :has() since #freeze is appended to <body> as a sibling of
+// [data-doctype="Web Form"], not a descendant of it.
+//
+// Because the :has() prefix makes every rule in this block more specific
+// than plain-#freeze selectors elsewhere (like common/grid.scss's
+// `#freeze.grid-form`, which drops z-index to 1020 so the open row's card
+// can sit above the backdrop), that lower z-index has to be reasserted here
+// too — otherwise this block's own z-index: 2000 wins and the backdrop
+// paints over the card instead of under it.
+body:has([data-doctype="Web Form"]) {
+	#freeze {
+		z-index: 2000;
+		bottom: 0;
+		opacity: 0;
+		// Desk's #freeze tints with var(--bg-color), which reads fine there because
+		// the desk canvas behind it isn't pure white. Website pages usually are, so
+		// that same token washes out to an invisible white-on-white overlay. Use a
+		// fixed dark scrim instead — visibly dims regardless of the page's theme.
+		background-color: rgba(0, 0, 0, 0.6);
+		transition: opacity 0.2s ease;
+	}
+
+	#freeze.in {
+		opacity: 1;
+	}
+
+	#freeze.grid-form {
+		z-index: 1020;
+	}
+}
+
+// The row editor's "Shortcuts: Ctrl+Up . Ctrl+Down . ESC" <kbd> badges look
+// flat here instead of Desk's embossed keycap look. Not a missing rule —
+// Bootstrap's kbd box-shadow is wrapped in `@if $enable-shadows`, and that
+// variable is driven site-wide by the active Website Theme's "Button
+// Shadows" setting (website_theme_template.scss), which is off on this site
+// (as it likely is on most, since it flattens every button, not just this).
+// Desk isn't subject to that theme system at all, so its kbd always has the
+// shadow. Reassert just Bootstrap's own default value, scoped to this one
+// Desk-borrowed component, so the rest of the site's buttons stay exactly as
+// themed.
+[data-doctype="Web Form"] .grid-shortcuts kbd {
+	box-shadow: inset 0 -0.1rem 0 rgba(0, 0, 0, 0.25);
+}
+
+// The row editor's footer toolbar (Shortcuts + "Insert Below") carries both
+// .hidden-xs and .flex in its markup. Desk's .hidden-xs only sets display
+// inside the xs–sm media query, so .flex wins outside it. The website
+// bundle's .hidden-xs (website/index.scss) also does `@extend .d-block`
+// unconditionally, which forces `display: block !important` at every width —
+// that beats .flex's plain `display: flex` regardless of source order, so
+// "Insert Below" drops out of the row into block flow below the shortcuts
+// text. Reassert flex here rather than touch the shared .hidden-xs utility,
+// which other website elements may depend on for that same block fallback.
+[data-doctype="Web Form"] .grid-footer-toolbar.hidden-xs {
+	display: flex !important;
+}

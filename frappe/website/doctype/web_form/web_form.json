@@ -7,9 +7,11 @@
  "engine": "InnoDB",
  "field_order": [
   "form_tab",
+  "section_break_cukq",
   "title",
   "route",
   "published",
+  "banner_image",
   "column_break_vdhm",
   "doc_type",
   "module",
@@ -56,7 +58,6 @@
   "web_form_fields",
   "customization_tab",
   "button_label",
-  "banner_image",
   "column_break_3",
   "breadcrumbs",
   "section_break_5",
@@ -100,10 +101,12 @@
    "fieldname": "module",
    "fieldtype": "Link",
    "label": "Module",
+   "mandatory_depends_on": "eval: doc.is_standard",
    "options": "Module Def"
   },
   {
    "default": "0",
+   "description": "Set for web forms shipped with apps. In developer mode the web form is exported to its module's folder, otherwise it becomes read-only",
    "fieldname": "is_standard",
    "fieldtype": "Check",
    "label": "Is standard",
@@ -296,11 +299,6 @@
    "label": "Success title"
   },
   {
-   "fieldname": "banner_image",
-   "fieldtype": "Attach Image",
-   "label": "Banner Image"
-  },
-  {
    "fieldname": "form_tab",
    "fieldtype": "Tab Break",
    "label": "Details"
@@ -308,6 +306,11 @@
   {
    "fieldname": "section_break_1",
    "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "banner_image",
+   "fieldtype": "Attach Image",
+   "label": "Banner Image"
   },
   {
    "fieldname": "settings_tab",
@@ -465,6 +468,10 @@
    "fieldname": "form_builder",
    "fieldtype": "HTML",
    "label": "Form Builder"
+  },
+  {
+   "fieldname": "section_break_cukq",
+   "fieldtype": "Section Break"
   }
  ],
  "icon": "icon-edit",
@@ -475,7 +482,7 @@
    "link_fieldname": "web_form"
   }
  ],
- "modified": "2026-06-18 15:58:18.453845",
+ "modified": "2026-09-03 13:17:23.209681",
  "modified_by": "Administrator",
  "module": "Website",
  "name": "Web Form",

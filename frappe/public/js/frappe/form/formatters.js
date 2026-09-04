@@ -380,8 +380,12 @@ frappe.form.formatters = {
 	},
 	TableMultiSelect: function (rows, df, options) {
 		rows = rows || [];
-		const meta = frappe.get_meta(df.options);
-		const link_field = meta.fields.find((df) => df.fieldtype === "Link");
+		// Web Form ships the link field pre-resolved on the docfield itself (see
+		// frappe.website.doctype.web_form.web_form.process_table_multiselect_field),
+		// since portal pages never sync child-doctype meta the way Desk does.
+		const link_field =
+			df.link_field || frappe.get_meta(df.options)?.fields?.find((f) => f.fieldtype === "Link");
+		if (!link_field) return "";
 		const formatted_values = rows.map((row) => {
 			const value = row[link_field.fieldname];
 			return `<span class="text-nowrap">

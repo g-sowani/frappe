@@ -55,11 +55,14 @@ export default class GridRow {
 
 	set_docfields() {
 		if (this.doc && this.parent_df.options) {
+			// this.grid.edit_docfields, not this.grid.docfields: the row-edit form
+			// (which this.docfields ultimately feeds, via GridRowForm) should get the
+			// full field list, not the grid's possibly-trimmed display-column list.
 			this.docfields = frappe.meta.get_docfields(
 				this.parent_df.options,
 				this.doc.name,
 				null,
-				this.grid.docfields
+				this.grid.edit_docfields
 			);
 		}
 	}

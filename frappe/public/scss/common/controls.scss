@@ -53,7 +53,17 @@ select.form-control {
 }
 
 /* table multiselect */
-.table-multiselect {
+// The box always carries .form-control alongside this class (both
+// table_multiselect.js and multiselect_pills.js add the pair), so the second
+// selector below is the same element - it just matches the specificity of the
+// unscoped `.form-control { height: var(--input-height); padding: var(--input-padding) }`
+// in common/form.scss. Bundles are free to import that file *after* this one -
+// website.bundle.css does, via website/web_form.scss - and on an equal-specificity
+// tie the later rule wins, which would pin the box to a single input row and let
+// the pills spill out over whatever follows it. The bare class stays for the one
+// consumer that uses it without .form-control: print_format_builder's TemplateInput.vue.
+.table-multiselect,
+.form-control.table-multiselect {
 	display: flex;
 	align-items: center;
 	flex-wrap: wrap;

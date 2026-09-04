@@ -862,9 +862,15 @@ export default class Grid {
 
 		if (this.doctype && this.frm) {
 			this.docfields = frappe.meta.get_docfields(this.doctype, this.frm.docname);
+			this.edit_docfields = this.docfields;
 		} else {
-			// fields given in docfield
+			// fields given in docfield: this is often just a compact column list (e.g.
+			// Web Form's in-list-view summary for the collapsed grid, which may both
+			// omit fields and add a synthetic display-only one). The expanded row-edit
+			// form needs the fuller field list separately when the caller supplies one,
+			// so it doesn't end up rendering only those summary columns.
 			this.docfields = this.df.fields;
+			this.edit_docfields = this.df.edit_fields || this.docfields;
 		}
 
 		this._apply_layout_child_overrides();
