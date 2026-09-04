@@ -180,7 +180,8 @@
    "fieldname": "introduction_text",
    "fieldtype": "Text Editor",
    "ignore_xss_filter": 1,
-   "label": "Introduction"
+   "label": "Description",
+   "placeholder": "Describe what this form is for..."
   },
   {
    "fieldname": "web_form_fields",
