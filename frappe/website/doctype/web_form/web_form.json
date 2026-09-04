@@ -16,7 +16,6 @@
   "is_standard",
   "section_break_1",
   "introduction_text",
-  "web_form_fields",
   "settings_tab",
   "access_control_section",
   "key_required",
@@ -51,6 +50,8 @@
   "section_break_4",
   "show_sidebar",
   "website_sidebar",
+  "fields_section_break",
+  "web_form_fields",
   "customization_tab",
   "button_label",
   "banner_image",
@@ -184,6 +185,12 @@
    "placeholder": "Describe what this form is for..."
   },
   {
+    "collapsible":1,
+    "fieldname": "fields_section_break",
+    "fieldtype": "Section Break",
+    "label": "Fields"
+  },
+  {
    "fieldname": "web_form_fields",
    "fieldtype": "Table",
    "label": "Web Form Fields",
@@ -294,7 +301,7 @@
   {
    "fieldname": "form_tab",
    "fieldtype": "Tab Break",
-   "label": "Form"
+   "label": "Details"
   },
   {
    "fieldname": "section_break_1",
