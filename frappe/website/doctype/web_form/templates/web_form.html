@@ -85,11 +85,20 @@
 			<div class="web-form-head">
 				<div class="title">
 					<div class="web-form-title ellipsis">
-						{% if show_list and not is_new %}
-							<h1 class="ellipsis">{{ _(web_form_title) or _(title) }}</h1>
+						{#- Once a document is loaded, `title` holds that document's title -
+						    its name, for doctypes without a title field - and the web form's own
+						    title moves to `web_form_title`. Head with the form's title in every
+						    case, never the document in its place. -#}
+						<h1 class="ellipsis">{{ _(web_form_title) or _(title) }}</h1>
+						{#- The document line says which submission this is. A real title field
+						    says something ("Goa Trip"); a bare name is a hash for doctypes with
+						    no naming rule, and only earns its keep when you arrived from a list
+						    of many - otherwise it just crowds the description below. -#}
+						{%- set has_document_title = title and title != doc_name -%}
+						{%- set show_document_line = web_form_title and title != web_form_title
+							and (has_document_title or show_list) -%}
+						{% if show_document_line %}
 							<p class="ellipsis">{{ _(title) }}</p>
-						{% else %}
-							<h1 class="ellipsis">{{ _(title) }}</h1>
 						{% endif %}
 					</div>
 					{% if is_new or in_edit_mode %}
@@ -99,7 +108,11 @@
 						{{ header_buttons() }}
 					</div>
 				</div>
-				{% if introduction_text and (is_new or in_edit_mode)  %}
+				{#- Shown in every mode: the field is labelled "Description" and describes
+				    the form itself, so a read-only submission needs it as much as a blank
+				    one. Gating it on is_new/in_edit_mode hid it entirely once
+				    login_required started routing people to their existing document. -#}
+				{% if introduction_text %}
 					<div class="web-form-introduction">{{ introduction_text }}</div>
 				{% endif %}
 			</div>
