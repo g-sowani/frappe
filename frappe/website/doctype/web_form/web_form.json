@@ -16,6 +16,8 @@
   "is_standard",
   "section_break_1",
   "introduction_text",
+  "form_builder_tab",
+  "form_builder",
   "settings_tab",
   "access_control_section",
   "key_required",
@@ -185,18 +187,6 @@
    "placeholder": "Describe what this form is for..."
   },
   {
-    "collapsible":1,
-    "fieldname": "fields_section_break",
-    "fieldtype": "Section Break",
-    "label": "Fields"
-  },
-  {
-   "fieldname": "web_form_fields",
-   "fieldtype": "Table",
-   "label": "Web Form Fields",
-   "options": "Web Form Field"
-  },
-  {
    "description": "Set size in MB",
    "fieldname": "max_attachment_size",
    "fieldtype": "Int",
@@ -284,6 +274,18 @@
    "label": "List setting message"
   },
   {
+    "collapsible":1,
+    "fieldname": "fields_section_break",
+    "fieldtype": "Section Break",
+    "label": "Fields"
+  },
+  {
+   "fieldname": "web_form_fields",
+   "fieldtype": "Table",
+   "label": "Web Form Fields",
+   "options": "Web Form Field"
+  },
+  {
    "fieldname": "customization_tab",
    "fieldtype": "Tab Break",
    "label": "Customization"
@@ -306,6 +308,16 @@
   {
    "fieldname": "section_break_1",
    "fieldtype": "Section Break"
+  },
+  {
+    "fieldname": "form_builder_tab",
+    "fieldtype": "Tab Break",
+    "label": "Form"
+  },
+  {
+    "fieldname": "form_builder",
+    "fieldtype": "HTML",
+    "label": "Form Builder"
   },
   {
    "fieldname": "settings_tab",
