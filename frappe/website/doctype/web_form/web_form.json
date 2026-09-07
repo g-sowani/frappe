@@ -106,7 +106,7 @@
   },
   {
    "default": "0",
-   "description": "Set for web forms shipped with apps. In developer mode the web form is exported to its module's folder, otherwise it becomes read-only",
+   "description": "Set for web forms shipped with apps. In developer mode the web form is exported to its module's folder; otherwise it becomes read-only.",
    "fieldname": "is_standard",
    "fieldtype": "Check",
    "label": "Is standard",
@@ -234,6 +234,7 @@
    "max_height": "140px"
   },
   {
+   "description": "For help see <a href=\"https://docs.frappe.io/framework/user/en/web-form/customization#custom-css\" target=\"_blank\" rel=\"noopener noreferrer\">Custom CSS Example</a>",
    "fieldname": "custom_css",
    "fieldtype": "Code",
    "label": "Custom CSS",
