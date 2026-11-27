@@ -27,14 +27,12 @@ class WhatsNew {
 
 	html() {
 		const theme = frappe.ui.get_current_theme() === "dark" ? "dark" : "light";
-		const eyebrow = __("What's New in v{0}", [this.release.version]);
 		const cards = this.features
 			.map(
 				(feature, i) => `
 				<article class="whats-new-card" data-index="${i}">
 					${this.media_html(feature, theme)}
-					<div class="whats-new-eyebrow">${frappe.utils.escape_html(eyebrow)}</div>
-					<h2 class="whats-new-title">${frappe.utils.escape_html(feature.title)}</h2>
+					<h3 class="whats-new-title">${frappe.utils.escape_html(feature.title)}</h3>
 					<p class="whats-new-description">${frappe.utils.escape_html(feature.description)}</p>
 				</article>`
 			)
@@ -47,13 +45,31 @@ class WhatsNew {
 			)
 			.join("");
 		return `
+			<header class="whats-new-header">
+				<div class="whats-new-heading">
+					<span class="whats-new-heading-icon">${frappe.utils.icon("sparkles", "md")}</span>
+					<h2 class="whats-new-heading-title">${__("What's New")}</h2>
+					${frappe.ui.badge.html({ label: `v${this.release.version}` })}
+				</div>
+				<span class="whats-new-date">${frappe.datetime.str_to_user(this.release.date)}</span>
+			</header>
 			<div class="whats-new-cards">${cards}</div>
 			<div class="whats-new-footer">
+				${frappe.ui.button.html({
+					label: __("Back"),
+					variant: "subtle",
+					icon: "arrow-left",
+					css_class: "whats-new-back",
+				})}
 				<div class="whats-new-dots">${dots}</div>
 				<div class="whats-new-actions">
 					${frappe.ui.button.html({ label: __("Skip"), variant: "ghost", css_class: "whats-new-skip" })}
-					${frappe.ui.button.html({ label: __("Back"), variant: "subtle", css_class: "whats-new-back" })}
-					${frappe.ui.button.html({ label: __("Next"), variant: "solid", css_class: "whats-new-next" })}
+					${frappe.ui.button.html({
+						label: __("Next"),
+						variant: "solid",
+						icon_right: "arrow-right",
+						css_class: "whats-new-next",
+					})}
 				</div>
 			</div>`;
 	}
@@ -107,11 +123,10 @@ class WhatsNew {
 		});
 
 		const $footer = this.dialog.$body.find(".whats-new-footer");
-		$footer.find(".whats-new-back").toggleClass("hide", index === 0);
+		$footer.find(".whats-new-back").toggleClass("invisible", index === 0);
 		$footer.find(".whats-new-skip").toggleClass("hide", this.is_last());
-		$footer
-			.find(".whats-new-next .es-button__label")
-			.text(this.is_last() ? __("Done") : __("Next"));
+		const $next = $footer.find(".whats-new-next").toggleClass("is-done", this.is_last());
+		$next.find(".es-button__label").text(this.is_last() ? __("Done") : __("Next"));
 	}
 
 	play_active() {
