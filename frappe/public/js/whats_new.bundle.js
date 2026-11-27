@@ -44,8 +44,8 @@ class WhatsNew {
 			.map(
 				(feature) => `
 				<article class="whats-new-card">
-					${this.media_html(feature, theme)}
 					<h3 class="whats-new-title">${frappe.utils.escape_html(feature.title)}</h3>
+					${this.media_html(feature, theme)}
 					<p class="whats-new-description">${frappe.utils.escape_html(feature.description)}</p>
 				</article>`
 			)
