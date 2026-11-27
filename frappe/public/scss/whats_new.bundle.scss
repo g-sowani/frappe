@@ -33,17 +33,6 @@ $ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 	gap: var(--margin-sm);
 }
 
-.whats-new-heading-icon {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	width: 28px;
-	height: 28px;
-	border-radius: var(--radius-lg);
-	background: var(--surface-gray-2);
-	color: var(--ink-gray-8);
-}
-
 .whats-new-heading-title {
 	color: var(--ink-gray-9);
 	font-size: var(--text-lg);

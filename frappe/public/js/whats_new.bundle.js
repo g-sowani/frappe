@@ -47,7 +47,6 @@ class WhatsNew {
 		return `
 			<header class="whats-new-header">
 				<div class="whats-new-heading">
-					<span class="whats-new-heading-icon">${frappe.utils.icon("sparkles", "md")}</span>
 					<h2 class="whats-new-heading-title">${__("What's New")}</h2>
 					${frappe.ui.badge.html({ label: `v${this.release.version}` })}
 				</div>
