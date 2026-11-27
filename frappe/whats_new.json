@@ -1,0 +1,34 @@
+[
+  {
+    "version": "16.60",
+    "date": "2026-11-18",
+    "link": "https://frappe.io/blog/product-updates/announcing-framework-erpnext-and-frappe-hr-v1660",
+    "features": [
+      {
+        "title": "Studio, now in Framework",
+        "description": "Build complete apps and custom pages without code. Studio now ships with the Framework, works with AI agents, and your interfaces go live as soon as you save them.",
+        "video": { "light": "", "dark": "" }
+      },
+      {
+        "title": "A new way to print reports",
+        "description": "Pick a print format, letterhead and page settings, and see a live preview update as you go.",
+        "video": { "light": "", "dark": "" }
+      },
+      {
+        "title": "Upload first, fill in later",
+        "description": "Start a document by uploading its file, then complete the form. Turn it on for any DocType.",
+        "video": { "light": "", "dark": "" }
+      },
+      {
+        "title": "Import rows into child tables",
+        "description": "Bring rows into a child table from Excel and map each column to a field, the same way the data import works.",
+        "video": { "light": "", "dark": "" }
+      },
+      {
+        "title": "Web Forms, rebuilt",
+        "description": "Arrange fields with a drag-and-drop editor, pull fields in from the DocType, and share forms through private links.",
+        "video": { "light": "", "dark": "" }
+      }
+    ]
+  }
+]

@@ -442,3 +442,15 @@ def get_pyproject(app: str) -> dict | None:
 
 	with open(pyproject_path, "rb") as f:
 		return load(f)
+
+
+@frappe.whitelist(methods=["GET"])
+def get_whats_new() -> list[dict]:
+	"""Releases from frappe/whats_new.json, newest first."""
+	releases = frappe.get_file_json(frappe.get_app_path("frappe", "whats_new.json"))
+	for release in releases:
+		release["app"] = "frappe"
+		for feature in release["features"]:
+			feature["title"] = _(feature["title"])
+			feature["description"] = _(feature["description"])
+	return releases

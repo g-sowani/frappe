@@ -92,6 +92,12 @@ frappe.ui.open_user_settings = function (tab = "profile") {
 		});
 };
 
+frappe.ui.open_whats_new = function () {
+	return frappe
+		.require(["whats_new.bundle.js", "whats_new.bundle.css"])
+		.then(() => frappe.ui.whats_new.show());
+};
+
 frappe.ui.Sidebar = class Sidebar {
 	constructor() {
 		if (!frappe.boot.setup_complete) {
@@ -440,6 +446,12 @@ frappe.ui.Sidebar = class Sidebar {
 						// beside the drawer to arrange one in.
 						condition: () => !!me.get_sidebar_app() && !frappe.is_mobile(),
 						onclick: () => me.dock?.edit(),
+					},
+					{
+						name: "whats-new",
+						label: __("What's New"),
+						icon: "sparkles",
+						onclick: () => frappe.ui.open_whats_new(),
 					},
 					{
 						name: "reload",
