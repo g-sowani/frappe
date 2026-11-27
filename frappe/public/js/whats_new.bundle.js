@@ -1,6 +1,10 @@
 frappe.provide("frappe.ui.whats_new");
 
-const WHEEL_STEP_GAP_MS = 450;
+const MODE_SWITCH_COOLDOWN_MS = 600;
+const GESTURE_DOMINANCE = 1.5;
+const TOUCH_SLOP_PX = 10;
+
+const prefers_reduced_motion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 frappe.ui.whats_new.show = async function () {
 	const releases = await frappe.xcall("frappe.utils.change_log.get_whats_new", undefined, "GET");
@@ -14,7 +18,8 @@ class WhatsNew {
 		this.release = release;
 		this.features = release.features;
 		this.index = 0;
-		this.last_wheel_step = 0;
+		this.mode = "cards";
+		this.mode_changed_at = 0;
 	}
 
 	show() {
@@ -95,12 +100,18 @@ class WhatsNew {
 		);
 		$body.on("click", ".whats-new-done", () => this.dialog.hide());
 
-		this.track.addEventListener("scroll", () => this.sync_to_scroll(), { passive: true });
-		this.track.addEventListener("wheel", (e) => this.step_on_wheel(e), { passive: false });
+		this.track.addEventListener("scroll", () => this.schedule_sync(), { passive: true });
+		this.track.addEventListener("wheel", (e) => this.on_wheel(e), { passive: false });
+		this.track.addEventListener("touchstart", (e) => this.on_touch_start(e), {
+			passive: true,
+		});
+		this.track.addEventListener("touchmove", (e) => this.on_touch_move(e), { passive: false });
 
 		this.dialog.$wrapper.on("keydown", (e) => {
-			if (e.key === "ArrowRight") this.go_to(this.index + 1);
-			if (e.key === "ArrowLeft") this.go_to(this.index - 1);
+			const step = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
+			if (step && this.mode === "list") this.set_mode("cards");
+			else if (step) this.go_to(this.index + step);
+			if (["ArrowDown", "ArrowUp"].includes(e.key)) this.set_mode("list");
 		});
 		this.dialog.$wrapper.on("shown.bs.modal", () => this.play_active());
 		this.dialog.onhide = () => this.$cards.find("video").each((_, video) => video.pause());
@@ -109,33 +120,98 @@ class WhatsNew {
 
 	go_to(index) {
 		if (index < 0 || index >= this.features.length) return;
-		const reduce_motion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-		this.track.scrollTo({
-			left: index * this.track.clientWidth,
-			behavior: reduce_motion ? "auto" : "smooth",
+		const behavior = prefers_reduced_motion() ? "auto" : "smooth";
+		if (this.mode === "list") {
+			this.track.scrollTo({ top: this.$cards.get(index).offsetTop, behavior });
+		} else {
+			this.track.scrollTo({ left: index * this.track.clientWidth, behavior });
+		}
+	}
+
+	schedule_sync() {
+		if (this.sync_frame) return;
+		this.sync_frame = requestAnimationFrame(() => {
+			this.sync_frame = null;
+			const index =
+				this.mode === "list"
+					? this.index_in_list()
+					: Math.round(this.track.scrollLeft / this.track.clientWidth);
+			if (index !== this.index) this.set_active(index);
 		});
 	}
 
-	sync_to_scroll() {
-		const index = Math.round(this.track.scrollLeft / this.track.clientWidth);
-		if (index !== this.index) this.set_active(index);
+	index_in_list() {
+		const { scrollTop, clientHeight, scrollHeight } = this.track;
+		if (scrollTop + clientHeight >= scrollHeight - 1) return this.features.length - 1;
+		const reading_line = scrollTop + clientHeight / 3;
+		let index = 0;
+		this.$cards.each((i, card) => {
+			if (card.offsetTop <= reading_line) index = i;
+		});
+		return index;
 	}
 
-	// A mouse wheel only scrolls vertically, so each notch steps one card.
-	step_on_wheel(e) {
-		if (Math.abs(e.deltaX) >= Math.abs(e.deltaY)) return;
+	on_wheel(e) {
+		this.switch_on_gesture(e, Math.abs(e.deltaX), Math.abs(e.deltaY));
+	}
+
+	on_touch_start(e) {
+		const touch = e.touches[0];
+		this.touch_origin = { x: touch.clientX, y: touch.clientY };
+	}
+
+	on_touch_move(e) {
+		if (!this.touch_origin) return;
+		const touch = e.touches[0];
+		const dx = Math.abs(touch.clientX - this.touch_origin.x);
+		const dy = Math.abs(touch.clientY - this.touch_origin.y);
+		if (Math.max(dx, dy) < TOUCH_SLOP_PX) return;
+		this.touch_origin = null;
+		this.switch_on_gesture(e, dx, dy);
+	}
+
+	// Vertical gestures open the list; sideways gestures return to cards.
+	switch_on_gesture(e, dx, dy) {
+		const wants_list = this.mode === "cards" && dy > dx * GESTURE_DOMINANCE;
+		const wants_cards = this.mode === "list" && dx > dy * GESTURE_DOMINANCE;
+		if (!wants_list && !wants_cards) return;
 		e.preventDefault();
+		this.set_mode(wants_list ? "list" : "cards");
+	}
+
+	set_mode(mode) {
 		const now = Date.now();
-		if (now - this.last_wheel_step < WHEEL_STEP_GAP_MS) return;
-		this.last_wheel_step = now;
-		this.go_to(this.index + Math.sign(e.deltaY));
+		if (mode === this.mode || now - this.mode_changed_at < MODE_SWITCH_COOLDOWN_MS) return;
+		this.mode_changed_at = now;
+
+		const index = this.index;
+		const $active = this.$cards.eq(index);
+		const update = () => {
+			this.mode = mode;
+			this.dialog.$wrapper.toggleClass("whats-new-list", mode === "list");
+			if (mode === "list") {
+				this.track.scrollLeft = 0;
+				this.track.scrollTop = $active.get(0).offsetTop;
+			} else {
+				this.track.scrollLeft = index * this.track.clientWidth;
+			}
+			this.set_active(index);
+		};
+
+		if (!document.startViewTransition || prefers_reduced_motion()) return update();
+		this.dialog.$wrapper.addClass("whats-new-morphing");
+		$active.addClass("whats-new-morph-source");
+		document.startViewTransition(update).finished.finally(() => {
+			this.dialog.$wrapper.removeClass("whats-new-morphing");
+			$active.removeClass("whats-new-morph-source");
+		});
 	}
 
 	set_active(index) {
 		this.index = index;
 		this.$cards.each((i, card) => {
 			card.classList.toggle("active", i === index);
-			card.inert = i !== index;
+			card.inert = this.mode === "cards" && i !== index;
 		});
 		this.$dots.each((i, dot) => {
 			dot.classList.toggle("active", i === index);

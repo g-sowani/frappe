@@ -37,6 +37,7 @@ $ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .whats-new-track {
+	position: relative;
 	display: flex;
 	overflow-x: auto;
 	overscroll-behavior-x: contain;
@@ -201,6 +202,59 @@ $ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 		width: 24px;
 		background: var(--ink-gray-8);
 	}
+}
+
+.whats-new-list {
+	.whats-new-track {
+		flex-direction: column;
+		gap: var(--margin-xl);
+		max-height: calc(100vh - 240px);
+		overflow-x: hidden;
+		overflow-y: auto;
+		overscroll-behavior: contain;
+		scroll-snap-type: none;
+	}
+
+	.whats-new-card {
+		flex: none;
+
+		.whats-new-title,
+		.whats-new-description {
+			opacity: 1;
+			transform: none;
+			transition: none;
+		}
+	}
+
+	.whats-new-nav {
+		display: none;
+	}
+}
+
+.whats-new-morphing .modal-content {
+	view-transition-name: whats-new-shell;
+}
+
+.whats-new-morph-source {
+	.whats-new-media {
+		view-transition-name: whats-new-media;
+	}
+
+	.whats-new-title {
+		view-transition-name: whats-new-title;
+	}
+
+	.whats-new-description {
+		view-transition-name: whats-new-description;
+	}
+}
+
+::view-transition-group(whats-new-shell),
+::view-transition-group(whats-new-media),
+::view-transition-group(whats-new-title),
+::view-transition-group(whats-new-description) {
+	animation-duration: 380ms;
+	animation-timing-function: $ease-out;
 }
 
 @media (prefers-reduced-motion: reduce) {
