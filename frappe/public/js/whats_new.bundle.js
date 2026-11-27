@@ -85,6 +85,7 @@ class WhatsNew {
 			if (e.key === "ArrowRight" && !this.is_last()) this.go_to(this.index + 1);
 			if (e.key === "ArrowLeft") this.go_to(this.index - 1);
 		});
+		this.dialog.$wrapper.on("shown.bs.modal", () => this.play_active());
 		this.dialog.onhide = () => this.$cards.find("video").each((_, video) => video.pause());
 		this.dialog.$wrapper.one("hidden.bs.modal", () => this.dialog.$wrapper.remove());
 	}
@@ -98,15 +99,8 @@ class WhatsNew {
 			card.classList.toggle("active", active);
 			card.dataset.from = i < index ? "back" : "forward";
 			card.inert = !active;
-			const video = card.querySelector("video");
-			if (!video) return;
-			if (active) {
-				video.currentTime = 0;
-				video.play().catch(() => {});
-			} else {
-				video.pause();
-			}
 		});
+		this.play_active();
 		this.$dots.each((i, dot) => {
 			dot.classList.toggle("active", i === index);
 			dot.setAttribute("aria-current", i === index ? "step" : "false");
@@ -118,6 +112,19 @@ class WhatsNew {
 		$footer
 			.find(".whats-new-next .es-button__label")
 			.text(this.is_last() ? __("Done") : __("Next"));
+	}
+
+	play_active() {
+		this.$cards.each((i, card) => {
+			const video = card.querySelector("video");
+			if (!video) return;
+			if (i === this.index && this.dialog.display) {
+				video.currentTime = 0;
+				video.play().catch(() => {});
+			} else {
+				video.pause();
+			}
+		});
 	}
 
 	is_last() {
