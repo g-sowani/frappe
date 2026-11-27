@@ -95,17 +95,21 @@ $ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	width: 32px;
-	height: 32px;
+	width: 28px;
+	height: 28px;
 	padding: 0;
 	border: none;
 	border-radius: var(--radius-full);
-	background: var(--surface-elevation-1);
-	box-shadow: var(--shadow-md);
-	color: var(--ink-gray-8);
+	background: var(--surface-alpha-gray-2);
+	backdrop-filter: blur(8px);
+	color: var(--ink-gray-6);
 	opacity: 0;
 	pointer-events: auto;
-	transition: opacity 200ms ease;
+	transition: opacity 200ms ease, color 200ms ease;
+
+	&:hover {
+		color: var(--ink-gray-9);
+	}
 
 	.whats-new-viewport:hover &,
 	&:focus-visible {
@@ -165,20 +169,31 @@ $ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 
 .whats-new-dots {
 	display: flex;
-	gap: var(--margin-xs);
 }
 
 .whats-new-dot {
-	width: 6px;
-	height: 6px;
-	padding: 0;
+	display: flex;
+	align-items: center;
+	height: 24px;
+	padding: 0 4px;
 	border: none;
-	border-radius: var(--radius-full);
-	background: var(--surface-gray-4);
-	transition: width 320ms $ease-out, background 320ms ease;
+	background: none;
 
-	&.active {
-		width: 18px;
+	&::before {
+		content: "";
+		width: 8px;
+		height: 8px;
+		border-radius: var(--radius-full);
+		background: var(--surface-gray-4);
+		transition: width 320ms $ease-out, background 320ms ease;
+	}
+
+	&:hover::before {
+		background: var(--ink-gray-5);
+	}
+
+	&.active::before {
+		width: 24px;
 		background: var(--ink-gray-8);
 	}
 }
@@ -187,7 +202,7 @@ $ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 	.whats-new-nav-button,
 	.whats-new-card .whats-new-title,
 	.whats-new-card .whats-new-description,
-	.whats-new-dot {
+	.whats-new-dot::before {
 		transition: none;
 	}
 }

@@ -71,7 +71,7 @@ class WhatsNew {
 
 	nav_button_html(direction, icon, label) {
 		return `<button type="button" class="whats-new-nav-button" data-direction="${direction}"
-			aria-label="${label}">${frappe.utils.icon(icon, "md")}</button>`;
+			aria-label="${label}">${frappe.utils.icon(icon, "sm")}</button>`;
 	}
 
 	media_html(feature, theme) {
