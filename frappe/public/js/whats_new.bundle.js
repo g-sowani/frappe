@@ -46,11 +46,12 @@ class WhatsNew {
 			.join("");
 		return `
 			<header class="whats-new-header">
-				<div class="whats-new-heading">
-					<h2 class="whats-new-heading-title">${__("What's New")}</h2>
-					${frappe.ui.badge.html({ label: `v${this.release.version}` })}
+				<h2 class="whats-new-heading-title">${__("What's New")}</h2>
+				<div class="whats-new-meta">
+					v${frappe.utils.escape_html(this.release.version)} · ${moment(this.release.date).format(
+			"D MMM YYYY"
+		)}
 				</div>
-				<span class="whats-new-date">${moment(this.release.date).format("D MMM YYYY")}</span>
 			</header>
 			<div class="whats-new-cards">${cards}</div>
 			<div class="whats-new-footer">

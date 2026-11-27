@@ -16,16 +16,7 @@ $ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .whats-new-header {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
 	margin-bottom: var(--margin-md);
-}
-
-.whats-new-heading {
-	display: flex;
-	align-items: center;
-	gap: var(--margin-sm);
 }
 
 .whats-new-heading-title {
@@ -35,9 +26,10 @@ $ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 	margin: 0;
 }
 
-.whats-new-date {
+.whats-new-meta {
 	color: var(--ink-gray-5);
 	font-size: var(--text-sm);
+	margin-top: var(--margin-xs);
 }
 
 .whats-new-cards {
