@@ -230,10 +230,6 @@ $ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 	}
 }
 
-.whats-new-morphing .modal-content {
-	view-transition-name: whats-new-shell;
-}
-
 .whats-new-morph-source {
 	.whats-new-media {
 		view-transition-name: whats-new-media;
@@ -248,7 +244,8 @@ $ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 	}
 }
 
-::view-transition-group(whats-new-shell),
+::view-transition-old(root),
+::view-transition-new(root),
 ::view-transition-group(whats-new-media),
 ::view-transition-group(whats-new-title),
 ::view-transition-group(whats-new-description) {

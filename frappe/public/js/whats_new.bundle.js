@@ -183,23 +183,22 @@ class WhatsNew {
 		this.mode_changed_at = now;
 
 		const index = this.index;
-		const $active = this.$cards.eq(index);
+		const active = this.$cards.get(index);
 		const update = () => {
+			const anchor_top = active.getBoundingClientRect().top;
 			this.mode = mode;
 			this.dialog.$wrapper.toggleClass("whats-new-list", mode === "list");
 			this.track.scrollLeft = mode === "list" ? 0 : index * this.track.clientWidth;
-			if (mode === "list" && index > 0) $active.get(0).scrollIntoView({ block: "start" });
-			else this.modal.scrollTop = 0;
+			this.modal.scrollTop =
+				mode === "list" ? active.getBoundingClientRect().top - anchor_top : 0;
 			this.set_active(index);
 		};
 
 		if (!document.startViewTransition || prefers_reduced_motion()) return update();
-		this.dialog.$wrapper.addClass("whats-new-morphing");
-		$active.addClass("whats-new-morph-source");
-		document.startViewTransition(update).finished.finally(() => {
-			this.dialog.$wrapper.removeClass("whats-new-morphing");
-			$active.removeClass("whats-new-morph-source");
-		});
+		active.classList.add("whats-new-morph-source");
+		document
+			.startViewTransition(update)
+			.finished.finally(() => active.classList.remove("whats-new-morph-source"));
 	}
 
 	set_active(index) {
