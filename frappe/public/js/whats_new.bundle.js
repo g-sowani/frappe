@@ -81,15 +81,12 @@ class WhatsNew {
 		$body.on("click", ".whats-new-skip", () => this.dialog.hide());
 		$body.on("click", ".whats-new-dot", (e) => this.go_to(+e.currentTarget.dataset.index));
 
-		const on_key = (e) => {
+		this.dialog.$wrapper.on("keydown", (e) => {
 			if (e.key === "ArrowRight" && !this.is_last()) this.go_to(this.index + 1);
 			if (e.key === "ArrowLeft") this.go_to(this.index - 1);
-		};
-		this.dialog.$wrapper.on("keydown", on_key);
-		this.dialog.onhide = () => {
-			this.dialog.$wrapper.off("keydown", on_key);
-			this.$cards.find("video").each((_, video) => video.pause());
-		};
+		});
+		this.dialog.onhide = () => this.$cards.find("video").each((_, video) => video.pause());
+		this.dialog.$wrapper.one("hidden.bs.modal", () => this.dialog.$wrapper.remove());
 	}
 
 	go_to(index) {
