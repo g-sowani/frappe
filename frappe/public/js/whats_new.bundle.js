@@ -61,7 +61,7 @@ class WhatsNew {
 	media_html(feature, theme) {
 		const src = feature.video?.[theme] || feature.video?.light;
 		if (src) {
-			return `<video class="whats-new-media" src="${encodeURI(src)}"
+			return `<video class="whats-new-media" src="${frappe.utils.escape_html(src)}"
 				muted loop playsinline preload="metadata"
 				aria-label="${frappe.utils.escape_html(feature.title)}"></video>`;
 		}
