@@ -5,11 +5,6 @@ $ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 		max-width: 760px;
 	}
 
-	.modal-content {
-		border-radius: var(--radius-2xl);
-		overflow: hidden;
-	}
-
 	.modal-header,
 	.modal-footer {
 		display: none;
@@ -97,7 +92,7 @@ $ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 	width: 100%;
 	aspect-ratio: 16 / 9;
 	object-fit: contain;
-	border-radius: var(--radius-xl);
+	border-radius: var(--radius-md);
 	border: 1px solid var(--outline-gray-1);
 	background: var(--surface-gray-2);
 	margin-bottom: var(--margin-lg);
