@@ -208,15 +208,13 @@ $ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 	.whats-new-track {
 		flex-direction: column;
 		gap: var(--margin-xl);
-		max-height: calc(100vh - 240px);
-		overflow-x: hidden;
-		overflow-y: auto;
-		overscroll-behavior: contain;
+		overflow: visible;
 		scroll-snap-type: none;
 	}
 
 	.whats-new-card {
 		flex: none;
+		scroll-margin-top: var(--margin-xl);
 
 		.whats-new-title,
 		.whats-new-description {
@@ -226,7 +224,8 @@ $ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 		}
 	}
 
-	.whats-new-nav {
+	.whats-new-nav,
+	.whats-new-footer {
 		display: none;
 	}
 }

@@ -26,6 +26,7 @@ class WhatsNew {
 		this.dialog = new frappe.ui.Dialog({ size: "large" });
 		this.dialog.$wrapper.addClass("whats-new-dialog");
 		this.dialog.$body.html(this.html());
+		this.modal = this.dialog.$wrapper.get(0);
 		this.track = this.dialog.$body.find(".whats-new-track").get(0);
 		this.$cards = this.dialog.$body.find(".whats-new-card");
 		this.$dots = this.dialog.$body.find(".whats-new-dot");
@@ -100,12 +101,13 @@ class WhatsNew {
 		);
 		$body.on("click", ".whats-new-done", () => this.dialog.hide());
 
-		this.track.addEventListener("scroll", () => this.schedule_sync(), { passive: true });
-		this.track.addEventListener("wheel", (e) => this.on_wheel(e), { passive: false });
-		this.track.addEventListener("touchstart", (e) => this.on_touch_start(e), {
+		this.track.addEventListener("scroll", () => this.sync_to_scroll(), { passive: true });
+		this.modal.addEventListener("scroll", () => this.sync_to_scroll(), { passive: true });
+		this.modal.addEventListener("wheel", (e) => this.on_wheel(e), { passive: false });
+		this.modal.addEventListener("touchstart", (e) => this.on_touch_start(e), {
 			passive: true,
 		});
-		this.track.addEventListener("touchmove", (e) => this.on_touch_move(e), { passive: false });
+		this.modal.addEventListener("touchmove", (e) => this.on_touch_move(e), { passive: false });
 
 		this.dialog.$wrapper.on("keydown", (e) => {
 			const step = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
@@ -122,31 +124,27 @@ class WhatsNew {
 		if (index < 0 || index >= this.features.length) return;
 		const behavior = prefers_reduced_motion() ? "auto" : "smooth";
 		if (this.mode === "list") {
-			this.track.scrollTo({ top: this.$cards.get(index).offsetTop, behavior });
+			this.$cards.get(index).scrollIntoView({ behavior, block: "start" });
 		} else {
 			this.track.scrollTo({ left: index * this.track.clientWidth, behavior });
 		}
 	}
 
-	schedule_sync() {
-		if (this.sync_frame) return;
-		this.sync_frame = requestAnimationFrame(() => {
-			this.sync_frame = null;
-			const index =
-				this.mode === "list"
-					? this.index_in_list()
-					: Math.round(this.track.scrollLeft / this.track.clientWidth);
-			if (index !== this.index) this.set_active(index);
-		});
+	sync_to_scroll() {
+		const index =
+			this.mode === "list"
+				? this.index_in_list()
+				: Math.round(this.track.scrollLeft / this.track.clientWidth);
+		if (index !== this.index) this.set_active(index);
 	}
 
 	index_in_list() {
-		const { scrollTop, clientHeight, scrollHeight } = this.track;
+		const { scrollTop, clientHeight, scrollHeight } = this.modal;
 		if (scrollTop + clientHeight >= scrollHeight - 1) return this.features.length - 1;
-		const reading_line = scrollTop + clientHeight / 3;
+		const reading_line = clientHeight / 3;
 		let index = 0;
 		this.$cards.each((i, card) => {
-			if (card.offsetTop <= reading_line) index = i;
+			if (card.getBoundingClientRect().top <= reading_line) index = i;
 		});
 		return index;
 	}
@@ -189,12 +187,9 @@ class WhatsNew {
 		const update = () => {
 			this.mode = mode;
 			this.dialog.$wrapper.toggleClass("whats-new-list", mode === "list");
-			if (mode === "list") {
-				this.track.scrollLeft = 0;
-				this.track.scrollTop = $active.get(0).offsetTop;
-			} else {
-				this.track.scrollLeft = index * this.track.clientWidth;
-			}
+			this.track.scrollLeft = mode === "list" ? 0 : index * this.track.clientWidth;
+			if (mode === "list" && index > 0) $active.get(0).scrollIntoView({ block: "start" });
+			else this.modal.scrollTop = 0;
 			this.set_active(index);
 		};
 
