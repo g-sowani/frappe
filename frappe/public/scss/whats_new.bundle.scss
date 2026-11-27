@@ -32,23 +32,27 @@ $ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 	margin-top: var(--margin-xs);
 }
 
-.whats-new-cards {
-	display: grid;
+.whats-new-viewport {
+	position: relative;
+}
+
+.whats-new-track {
+	display: flex;
+	overflow-x: auto;
+	overscroll-behavior-x: contain;
+	scroll-snap-type: x mandatory;
+	scrollbar-width: none;
+
+	&::-webkit-scrollbar {
+		display: none;
+	}
 }
 
 .whats-new-card {
-	grid-area: 1 / 1;
-	opacity: 0;
-	visibility: hidden;
-	transition: opacity 320ms ease, transform 320ms $ease-out, visibility 0s linear 320ms;
-
-	&[data-from="back"] {
-		transform: translateX(-24px);
-	}
-
-	&[data-from="forward"] {
-		transform: translateX(24px);
-	}
+	flex: 0 0 100%;
+	min-width: 0;
+	scroll-snap-align: start;
+	scroll-snap-stop: always;
 
 	.whats-new-title,
 	.whats-new-description {
@@ -58,11 +62,6 @@ $ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 	}
 
 	&.active {
-		opacity: 1;
-		visibility: visible;
-		transform: none;
-		transition-delay: 0s;
-
 		.whats-new-title,
 		.whats-new-description {
 			opacity: 1;
@@ -76,6 +75,41 @@ $ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 		.whats-new-description {
 			transition-delay: 160ms;
 		}
+	}
+}
+
+.whats-new-nav {
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	aspect-ratio: 16 / 9;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 0 var(--padding-sm);
+	pointer-events: none;
+}
+
+.whats-new-nav-button {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	padding: 0;
+	border: none;
+	border-radius: var(--radius-full);
+	background: var(--surface-elevation-1);
+	box-shadow: var(--shadow-md);
+	color: var(--ink-gray-8);
+	opacity: 0;
+	pointer-events: auto;
+	transition: opacity 200ms ease;
+
+	.whats-new-viewport:hover &,
+	&:focus-visible {
+		opacity: 1;
 	}
 }
 
@@ -119,8 +153,13 @@ $ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 	align-items: center;
 	margin-top: var(--margin-xl);
 
-	.whats-new-back {
-		justify-self: start;
+	.whats-new-dots {
+		grid-column: 2;
+	}
+
+	.whats-new-done {
+		grid-column: 3;
+		justify-self: end;
 	}
 }
 
@@ -144,18 +183,8 @@ $ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 	}
 }
 
-.whats-new-actions {
-	display: flex;
-	justify-content: flex-end;
-	gap: var(--margin-sm);
-}
-
-.whats-new-next.is-done svg {
-	display: none;
-}
-
 @media (prefers-reduced-motion: reduce) {
-	.whats-new-card,
+	.whats-new-nav-button,
 	.whats-new-card .whats-new-title,
 	.whats-new-card .whats-new-description,
 	.whats-new-dot {

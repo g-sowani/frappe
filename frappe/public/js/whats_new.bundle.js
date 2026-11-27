@@ -1,5 +1,7 @@
 frappe.provide("frappe.ui.whats_new");
 
+const WHEEL_STEP_GAP_MS = 450;
+
 frappe.ui.whats_new.show = async function () {
 	const releases = await frappe.xcall("frappe.utils.change_log.get_whats_new", undefined, "GET");
 	const release = releases?.[0];
@@ -12,25 +14,30 @@ class WhatsNew {
 		this.release = release;
 		this.features = release.features;
 		this.index = 0;
+		this.last_wheel_step = 0;
 	}
 
 	show() {
 		this.dialog = new frappe.ui.Dialog({ size: "large" });
 		this.dialog.$wrapper.addClass("whats-new-dialog");
 		this.dialog.$body.html(this.html());
+		this.track = this.dialog.$body.find(".whats-new-track").get(0);
 		this.$cards = this.dialog.$body.find(".whats-new-card");
 		this.$dots = this.dialog.$body.find(".whats-new-dot");
 		this.bind();
 		this.dialog.show();
-		this.go_to(0);
+		this.set_active(0);
 	}
 
 	html() {
 		const theme = frappe.ui.get_current_theme() === "dark" ? "dark" : "light";
+		const meta = `v${this.release.version} · ${moment(this.release.date).format(
+			"D MMM YYYY"
+		)}`;
 		const cards = this.features
 			.map(
-				(feature, i) => `
-				<article class="whats-new-card" data-index="${i}">
+				(feature) => `
+				<article class="whats-new-card">
 					${this.media_html(feature, theme)}
 					<h3 class="whats-new-title">${frappe.utils.escape_html(feature.title)}</h3>
 					<p class="whats-new-description">${frappe.utils.escape_html(feature.description)}</p>
@@ -47,31 +54,24 @@ class WhatsNew {
 		return `
 			<header class="whats-new-header">
 				<h2 class="whats-new-heading-title">${__("What's New")}</h2>
-				<div class="whats-new-meta">
-					v${frappe.utils.escape_html(this.release.version)} · ${moment(this.release.date).format(
-			"D MMM YYYY"
-		)}
-				</div>
+				<div class="whats-new-meta">${frappe.utils.escape_html(meta)}</div>
 			</header>
-			<div class="whats-new-cards">${cards}</div>
-			<div class="whats-new-footer">
-				${frappe.ui.button.html({
-					label: __("Back"),
-					variant: "subtle",
-					icon: "arrow-left",
-					css_class: "whats-new-back",
-				})}
-				<div class="whats-new-dots">${dots}</div>
-				<div class="whats-new-actions">
-					${frappe.ui.button.html({ label: __("Skip"), variant: "ghost", css_class: "whats-new-skip" })}
-					${frappe.ui.button.html({
-						label: __("Next"),
-						variant: "solid",
-						icon_right: "arrow-right",
-						css_class: "whats-new-next",
-					})}
+			<div class="whats-new-viewport">
+				<div class="whats-new-track">${cards}</div>
+				<div class="whats-new-nav">
+					${this.nav_button_html("prev", "chevron-left", __("Previous"))}
+					${this.nav_button_html("next", "chevron-right", __("Next"))}
 				</div>
+			</div>
+			<div class="whats-new-footer">
+				<div class="whats-new-dots">${dots}</div>
+				${frappe.ui.button.html({ label: __("Done"), variant: "solid", css_class: "whats-new-done" })}
 			</div>`;
+	}
+
+	nav_button_html(direction, icon, label) {
+		return `<button type="button" class="whats-new-nav-button" data-direction="${direction}"
+			aria-label="${label}">${frappe.utils.icon(icon, "md")}</button>`;
 	}
 
 	media_html(feature, theme) {
@@ -89,16 +89,17 @@ class WhatsNew {
 
 	bind() {
 		const $body = this.dialog.$body;
-		$body.on("click", ".whats-new-next", () => {
-			if (this.is_last()) this.dialog.hide();
-			else this.go_to(this.index + 1);
-		});
-		$body.on("click", ".whats-new-back", () => this.go_to(this.index - 1));
-		$body.on("click", ".whats-new-skip", () => this.dialog.hide());
 		$body.on("click", ".whats-new-dot", (e) => this.go_to(+e.currentTarget.dataset.index));
+		$body.on("click", ".whats-new-nav-button", (e) =>
+			this.go_to(this.index + (e.currentTarget.dataset.direction === "next" ? 1 : -1))
+		);
+		$body.on("click", ".whats-new-done", () => this.dialog.hide());
+
+		this.track.addEventListener("scroll", () => this.sync_to_scroll(), { passive: true });
+		this.track.addEventListener("wheel", (e) => this.step_on_wheel(e), { passive: false });
 
 		this.dialog.$wrapper.on("keydown", (e) => {
-			if (e.key === "ArrowRight" && !this.is_last()) this.go_to(this.index + 1);
+			if (e.key === "ArrowRight") this.go_to(this.index + 1);
 			if (e.key === "ArrowLeft") this.go_to(this.index - 1);
 		});
 		this.dialog.$wrapper.on("shown.bs.modal", () => this.play_active());
@@ -108,25 +109,43 @@ class WhatsNew {
 
 	go_to(index) {
 		if (index < 0 || index >= this.features.length) return;
-		this.index = index;
-
-		this.$cards.each((i, card) => {
-			const active = i === index;
-			card.classList.toggle("active", active);
-			card.dataset.from = i < index ? "back" : "forward";
-			card.inert = !active;
+		const reduce_motion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+		this.track.scrollTo({
+			left: index * this.track.clientWidth,
+			behavior: reduce_motion ? "auto" : "smooth",
 		});
-		this.play_active();
+	}
+
+	sync_to_scroll() {
+		const index = Math.round(this.track.scrollLeft / this.track.clientWidth);
+		if (index !== this.index) this.set_active(index);
+	}
+
+	// A mouse wheel only scrolls vertically, so each notch steps one card.
+	step_on_wheel(e) {
+		if (Math.abs(e.deltaX) >= Math.abs(e.deltaY)) return;
+		e.preventDefault();
+		const now = Date.now();
+		if (now - this.last_wheel_step < WHEEL_STEP_GAP_MS) return;
+		this.last_wheel_step = now;
+		this.go_to(this.index + Math.sign(e.deltaY));
+	}
+
+	set_active(index) {
+		this.index = index;
+		this.$cards.each((i, card) => {
+			card.classList.toggle("active", i === index);
+			card.inert = i !== index;
+		});
 		this.$dots.each((i, dot) => {
 			dot.classList.toggle("active", i === index);
 			dot.setAttribute("aria-current", i === index ? "step" : "false");
 		});
-
-		const $footer = this.dialog.$body.find(".whats-new-footer");
-		$footer.find(".whats-new-back").toggleClass("invisible", index === 0);
-		$footer.find(".whats-new-skip").toggleClass("hide", this.is_last());
-		const $next = $footer.find(".whats-new-next").toggleClass("is-done", this.is_last());
-		$next.find(".es-button__label").text(this.is_last() ? __("Done") : __("Next"));
+		const $body = this.dialog.$body;
+		$body.find('[data-direction="prev"]').toggleClass("invisible", index === 0);
+		$body.find('[data-direction="next"]').toggleClass("invisible", this.is_last());
+		$body.find(".whats-new-done").toggleClass("invisible", !this.is_last());
+		this.play_active();
 	}
 
 	play_active() {
